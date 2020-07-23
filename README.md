@@ -24,3 +24,12 @@
 * 日志
     * LogBack
     * SLF4j
+* 接口文档
+    * knife4j
+        ~~~
+        <dependency>
+            <groupId>com.github.xiaoymin</groupId>
+            <artifactId>knife4j-spring-boot-starter</artifactId>
+            <version>2.0.4</version>
+        </dependency>
+        ~~~
