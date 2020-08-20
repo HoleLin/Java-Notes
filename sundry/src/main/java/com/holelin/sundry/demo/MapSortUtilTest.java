@@ -1,6 +1,6 @@
 package com.holelin.sundry.demo;
 
-import com.holelin.sundry.utils.MapSortUtil;
+import com.holelin.sundry.utils.collection.MapSortUtil;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;

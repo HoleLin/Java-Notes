@@ -1,4 +1,4 @@
-package com.holelin.sundry.utils;
+package com.holelin.sundry.utils.collection;
 
 import cn.hutool.core.collection.CollectionUtil;
 
