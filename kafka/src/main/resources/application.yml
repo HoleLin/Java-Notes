@@ -1,2 +1,39 @@
 server:
   port: 8091
+###########【Kafka集群】###########
+spring:
+  kafka:
+    bootstrap-servers: localhost:19092
+    producer:
+      # 应答级别:多少个分区副本备份完成时向生产者发送ack确认(可选0、1、all/-1)
+      acks: -1
+      # 重试次数
+      retries: 6
+      batch-size: 16384
+      properties:
+        # 提交延时
+        linger:
+          ms: 0
+      # 生产端缓冲区大小
+      buffer-memory: 33554432
+      # Kafka提供的序列化和反序列化类
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      transaction-id-prefix: kafka_tx.
+    consumer:
+      # 默认的消费组ID
+      group-id: defaultConsumerGroup
+      # 提交offset延时(接收到消息后多久提交offset)
+      auto-commit-interval: 1000
+      # 是否自动提交offset
+      enable-auto-commit: true
+      # 当kafka中没有初始offset或offset超出范围时将自动重置offset
+      # earliest:重置为分区中最小的offset;
+      # latest:重置为分区中最新的offset(消费分区中新产生的数据);
+      # none:只要有一个分区不存在已提交的offset,就抛出异常;
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    # 消费端监听的topic不存在时，项目启动会报错(关掉)
+    listener:
+      missing-topics-fatal: false
