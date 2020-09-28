@@ -17,6 +17,10 @@ public enum SymbolEnum {
      */
     COMMA(","),
     /**
+     * 冒号
+     */
+    COLON(":"),
+    /**
      * 分号
      */
     SEMICOLON(";"),
@@ -32,6 +36,15 @@ public enum SymbolEnum {
      * 句号(英文状态);点
      */
     POINT("."),
+    /**
+     * 空白
+     */
+    BLANK_SPACE(" "),
+    /**
+     * 空字符串
+     */
+    EMPTY_STRING(""),
+
     ;
 
     SymbolEnum(String desc) {
@@ -39,4 +52,8 @@ public enum SymbolEnum {
     }
 
     private String desc;
+
+    public String getDesc() {
+        return desc;
+    }
 }

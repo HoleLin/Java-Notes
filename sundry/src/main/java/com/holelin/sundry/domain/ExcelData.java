@@ -18,17 +18,7 @@ public class ExcelData {
     /**
      * 组织机构名称
      */
-    @ExcelProperty("公安机关")
+    @ExcelProperty("部门名称")
     private String departmentName;
-    /**
-     * 国标ID
-     */
-    @ExcelProperty("设备编码")
-    private String gbid;
-    /**
-     * 设备名称
-     */
-    @ExcelProperty("设备名称")
-    private String deviceName;
 
 }

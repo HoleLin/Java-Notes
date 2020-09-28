@@ -1,12 +1,17 @@
 package com.holelin.sundry.utils;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.holelin.sundry.constants.StringConstants;
+import com.holelin.sundry.domain.DepartmentConfigInfo;
 import com.holelin.sundry.enums.NumberEnum;
+import com.holelin.sundry.enums.SymbolEnum;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.servlet.http.HttpServletRequest;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -108,6 +113,59 @@ public class DealStringUtil {
             }
         }
         return ip;
+    }
+
+    /**
+     * 处理组织机构配置项
+     *
+     * @param departmentInfo 组织机构信息
+     * @return
+     * @throws
+     * @author HoleLin
+     * @date 2020/8/3 18:46
+     */
+    public static List<DepartmentConfigInfo> handleDepartmentFromConfig(String departmentInfo) {
+        List<DepartmentConfigInfo> result = Lists.newArrayList();
+        for (String department : departmentInfo.split(SymbolEnum.COMMA.getDesc())) {
+            String[] split = department.split(SymbolEnum.COLON.getDesc());
+            if (NumberEnum.TWO.getNum() == split.length) {
+                DepartmentConfigInfo infoDTO = new DepartmentConfigInfo();
+                String departmentCode = split[0].replaceAll(SymbolEnum.BLANK_SPACE.getDesc(),
+                        SymbolEnum.EMPTY_STRING.getDesc());
+                String departmentNameAndSort = split[1].trim();
+                infoDTO.setDepartmentCode(departmentCode);
+                // 将departmentCode后面的0都替换掉
+                infoDTO.setHandleAfterDepartmentCode(replaceLastZero(departmentCode));
+                String[] departmentNameAndSortArray = departmentNameAndSort.split(SymbolEnum.MIDDLE_LINE.getDesc());
+                if (NumberEnum.TWO.getNum() == departmentNameAndSortArray.length) {
+                    infoDTO.setDepartmentName(departmentNameAndSortArray[0]);
+                    infoDTO.setSort(Integer.parseInt(departmentNameAndSortArray[1]));
+                }
+                result.add(infoDTO);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 将departmentCode后面的0都替换掉
+     * @param departmentCode 组织机构
+     * @return java.lang.String
+     * @throws
+     * @author HoleLin
+     * @date 2020/7/28 16:57
+     */
+    public static String replaceLastZero(String departmentCode) {
+        // 翻转字符串
+        StringBuilder sb = new StringBuilder(departmentCode).reverse();
+        // 计算0的个数
+        int zeroCount = 0;
+        while (StringConstants.CHAR_ZERO == sb.charAt(zeroCount)) {
+            zeroCount++;
+        }
+        // 替换掉0,最后进行翻转复原
+        sb.replace(NumberEnum.ZERO.getNum(), zeroCount, SymbolEnum.EMPTY_STRING.getDesc()).reverse();
+        return sb.toString();
     }
 
     public static void main(String[] args) {

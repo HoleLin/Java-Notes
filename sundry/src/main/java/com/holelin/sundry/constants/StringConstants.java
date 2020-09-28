@@ -11,4 +11,7 @@ package com.holelin.sundry.constants;
  */
 
 public class StringConstants {
+
+    public static char CHAR_ZERO = '0';
+
 }
