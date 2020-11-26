@@ -1,4 +1,4 @@
-package com.holelin.sundry;
+package com.holelin.sundry.common;
 
 import com.holelin.sundry.utils.collection.MapSortUtil;
 import org.junit.jupiter.api.BeforeAll;
@@ -12,7 +12,6 @@ import java.util.Map;
 /**
  * Map排序工具类
  *
- * @author liuwangyanghdu@163.com  明明如月
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MapSortUtilTest {

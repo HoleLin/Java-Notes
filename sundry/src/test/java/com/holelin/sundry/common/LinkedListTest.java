@@ -1,4 +1,4 @@
-package com.holelin.sundry;
+package com.holelin.sundry.common;
 
 import java.util.Iterator;
 import java.util.LinkedList;
