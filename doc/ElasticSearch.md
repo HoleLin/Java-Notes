@@ -1,6 +1,27 @@
 ## ElasticSearch
 
-### 1. 安装
+* <a id ="目录">目录</a>
+* <a href="#使用URL限制搜索范围">安装</a>
+* <a href="#使用URL限制搜索范围">搜索基础</a>
+  * <a href="#使用URL限制搜索范围">使用URL限制搜索范围</a>
+  * <a href="#搜索请求的基本模块">搜索请求的基本模块</a>
+  * <a href="#基于URL的搜索请求">基于URL的搜索请求</a>
+  * <a href="#基于请求主体的搜索请求">基于请求主体的搜索请求</a>
+* <a href="#各种查询">各种查询</a>
+  * <a href="#match查询和term过滤器">match查询和term过滤器</a>
+  * <a href="#常用的基础查询和过滤器">常用的基础查询和过滤器</a>
+    * <a href="#match_all查询">match_all查询</a>
+    * <a href="#query_string查询">query_string查询</a>
+    * <a href="#term查询和term过滤器">term查询和term过滤器</a>
+    * <a href="#terms查询<">terms查询</a>
+    * <a href="#match查询和term过滤器">match查询和term过滤器</a>
+    * <a href="#词组查询行为">词组查询行为</a>
+    * <a href="#phrase_prefix查询">phrase_prefix查询</a>
+  * <a href="#组合查询或复合查询">组合查询或复合查询</a>
+    * <a href="#bool查询">bool查询</a>
+    * <a href="#bool过滤器">bool过滤器</a>
+
+### 1.<a id="安装"> 安装</a>
 
 * UNIX类的操作系统
 
@@ -12,9 +33,9 @@
 
 * Window下载,解压,执行elasticsearch.bat脚本
 
-### 2. 搜索
+### 2. <a id="搜索">搜索</a>
 
-* #### 使用URL限制搜索范围
+* #### <a id="使用URL限制搜索范围">使用URL限制搜索范围</a>
 
   ```shell
   // 搜索整个集群
@@ -31,7 +52,7 @@
   curl  'localhost:9200/+get-toge*,-get-together/_search' -d '...'
   ```
 
-* #### 搜索请求的基本模块
+* #### <a id="搜索请求的基本模块">搜索请求的基本模块</a>
 
   > **query** : 搜索请求最重要的组成部分.
   >
@@ -43,13 +64,13 @@
   >
   > **sort** : 默认的排序是基于文档的得分
 
-* #### 基于URL的搜索请求
+* #### <a id="基于URL的搜索请求">基于URL的搜索请求</a>
 
   ```shell
   curl 'localhost:9200/get-together/_search?from=10&size=10&sort=date:asc&_source=title,date&q=elasticsearch' 
   ```
 
-* #### 基于请求主体的搜索请求
+* #### <a id="基于请求主体的搜索请求">基于请求主体的搜索请求</a>
 
   ```shell
   curl 'localhost:9200/get-together/_search' -d 
@@ -144,230 +165,339 @@
     }
     ```
 
+### 3. <a id="查询和过滤器DSL">查询和过滤器DSL</a>
 
+* ##### <a id="match查询和term过滤器">match查询和term过滤器</a>
 
-* #### 查询和过滤器DSL
+  ```shell
+  curl 'localhost:9200/get-together/event/_search' -d 
+  '{
+  	"query": {
+  		"match": {
+  			"title": "hadoop"
+  		}
+  	}
+  }'
+  ```
 
-  * ##### match查询和term过滤器
+  ![match与term过滤器的区别.png](https://github.com/HoleLin/springboot-demos/blob/master/doc/images/match%E4%B8%8Eterm%E8%BF%87%E6%BB%A4%E5%99%A8%E7%9A%84%E5%8C%BA%E5%88%AB.png?raw=true)
+
+  
+  * 使用过滤器的查询
 
     ```shell
-    curl 'localhost:9200/get-together/event/_search' -d 
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+        "query": {
+            "bool": {
+            	// 查询类型 这里指定了一个附上过滤器的查询
+                "must": {
+                    "match": {
+                        "title": "hadoop"
+                    }
+                },
+                // 额外的过滤器将查询结果限制为用户名为andy的数据
+                "filter": {
+                    "term": {
+                        "username": "andy"
+                    }
+                }
+            }
+        }
+    }'
+    ```
+
+* ##### <a id="常用的基础查询和过滤器">常用的基础查询和过滤器</a>
+
+  * <a id="match_all查询">match_all查询</a>
+
+    ```shell
+    curl 'localhost:9200/_search' -d 
     '{
     	"query": {
-    		"match": {
-    			"title": "hadoop"
+    		"bool": {
+    			"must": {
+    				"match_all": {}
+    			},
+    			"filter": {
+    				"term":{
+    					"xxx": ""
+    				}
+    			}
     		}
     	}
     }'
     ```
 
-    ![match与term过滤器的区别.png](https://github.com/HoleLin/springboot-demos/blob/master/doc/images/match%E4%B8%8Eterm%E8%BF%87%E6%BB%A4%E5%99%A8%E7%9A%84%E5%8C%BA%E5%88%AB.png?raw=true)
+  * <a id="query_string查询">query_string查询</a>
 
-    
-    * 使用过滤器的查询
+    ```shell
+    curl -XPOST 'http://localhost:9200/get-together/_search?pretty' -d 
+    '{
+    	"query": {
+    		"query_string": {
+    			// 由于查询中没有指定字段,所以使用了默认字段"description"
+    			"default_field": "description"
+    			"query": "nosql"
+    		}
+    	}
+    }'
+    ```
 
-      ```shell
-      curl 'localhost:9200/get-together/_search' -d 
-      '{
-          "query": {
-              "bool": {
-              	// 查询类型 这里指定了一个附上过滤器的查询
-                  "must": {
-                      "match": {
-                          "title": "hadoop"
-                      }
-                  },
-                  // 额外的过滤器将查询结果限制为用户名为andy的数据
-                  "filter": {
-                      "term": {
-                          "username": "andy"
-                      }
-                  }
-              }
-          }
-      }'
-      ```
+  * <a id="term查询和term过滤器">term查询和term过滤器</a>
 
-  * ##### 常用的基础查询和过滤器
-
-    * match_all查询
-
-      ```shell
-      curl 'localhost:9200/_search' -d 
-      '{
-      	"query": {
-      		"bool": {
-      			"must": {
-      				"match_all": {}
-      			},
-      			"filter": {
-      				"term":{
-      					"xxx": ""
-      				}
-      			}
-      		}
-      	}
-      }'
-      ```
-
-    * query_string查询
-
-      ```shell
-      curl -XPOST 'http://localhost:9200/get-together/_search?pretty' -d 
-      '{
-      	"query": {
-      		"query_string": {
-      			// 由于查询中没有指定字段,所以使用了默认字段"description"
-      			"default_field": "description"
-      			"query": "nosql"
-      		}
-      	}
-      }'
-      ```
-
-    * term查询和term过滤器
-
-      ```shell
-      // 词条查询
-      curl 'localhost:9200/get-together/group/_search' -d 
-      '{
-      	"query": {
-      		"term": {
-      			"tags": "elasticsearch"
-      		}
-      	},
-      	"_source": ["name","tags"]
-      }'
-      // 词条过滤器
-      curl 'localhost:9200/get-together/_search' -d 
-      '{
-          "query": {
-              "bool": {
-                  "must": {
-                      "match_all": {}
-                  },
-                  "filter": {
-                      "term": {
-                          "xxx": "xxx"
-                      }
-                  }
-              }
-          },
-          "_source": [
-              "name",
-              "tags"
-          ]
-      }'
-      ```
-
-    * terms查询
-
-      ```shell
-      // 使用多词条搜索多个词条
-      curl 'localhost:9200/get-together/group/_search' -d 
-      '{
-      	"query": {
-      		"terms": {
-      			"tags": ["jvm","hadoop"],
-      		}
-      	},
-      	"_source": ["name","tags"]
-      }'
-      // 强制规定每一篇文档中匹配词条的最小数量
-      {
+    ```shell
+    // 词条查询
+    curl 'localhost:9200/get-together/group/_search' -d 
+    '{
+    	"query": {
+    		"term": {
+    			"tags": "elasticsearch"
+    		}
+    	},
+    	"_source": ["name","tags"]
+    }'
+    // 词条过滤器
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
         "query": {
-          "bool": {
-            "minimum_should_match": 2,
-            "should": [
-              {
-                "term": {
-                  "xxx": "xxx"
-                 }
-              },
-              {
-                "term": {
-                  "xxx": "xxx"
+            "bool": {
+                "must": {
+                    "match_all": {}
+                },
+                "filter": {
+                    "term": {
+                        "xxx": "xxx"
+                    }
                 }
+            }
+        },
+        "_source": [
+            "name",
+            "tags"
+        ]
+    }'
+    ```
+
+  * <a id="terms查询">terms查询</a>
+
+    ```shell
+    // 使用多词条搜索多个词条
+    curl 'localhost:9200/get-together/group/_search' -d 
+    '{
+    	"query": {
+    		"terms": {
+    			"tags": ["jvm","hadoop"],
+    		}
+    	},
+    	"_source": ["name","tags"]
+    }'
+    // 强制规定每一篇文档中匹配词条的最小数量
+    {
+      "query": {
+        "bool": {
+          "minimum_should_match": 2,
+          "should": [
+            {
+              "term": {
+                "xxx": "xxx"
+               }
+            },
+            {
+              "term": {
+                "xxx": "xxx"
               }
-            ]
-          }
+            }
+          ]
         }
       }
-      ```
+    }
+    ```
 
-    * match查询和term过滤器
+  * <a id="match查询和term过滤器">match查询和term过滤器</a>
 
-      ```shell
-      // 默认情况下,match查询会使用布尔行为和OR操作符
-      curl 'localhost:9200/get-together/_search' -d 
-      '{
-      	"query": {
-      		"match": {
-      			// 对于name的值,使用映射,而不是字符串
-      			"name": {
-      				// 在query的键里面指定要搜索的字符串
-      				"query": "Elasticsearch Denver",
-      				// 使用and操作符,而不是默认的or操作符
-      				"operator": "and"
-      			}
-      		}
-      	}
-      }'
-      ```
+    ```shell
+    // 默认情况下,match查询会使用布尔行为和OR操作符
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+    	"query": {
+    		"match": {
+    			// 对于name的值,使用映射,而不是字符串
+    			"name": {
+    				// 在query的键里面指定要搜索的字符串
+    				"query": "Elasticsearch Denver",
+    				// 使用and操作符,而不是默认的or操作符
+    				"operator": "and"
+    			}
+    		}
+    	}
+    }'
+    ```
 
-    * 词组查询行为
+  * <a id="词组查询行为">词组查询行为</a>
 
-      ```shell
-      curl 'localhost:9200/get-together/group/_search' -d 
-      '{
-      	"query": {
-      		"match": {
-      			"name": {
-      				// 使用match_phrase查询,而不是普通的match查询
-      				"type": "phrase",
-      				"query": "enterprise london",
-      				// 将slop设置为1,表明允许词条之间有间隔
-      				"slop": 1
-      			}
-      		}
-      	},
-      	"_source": ["name","description"]
-      }'
-      ```
+    ```shell
+    curl 'localhost:9200/get-together/group/_search' -d 
+    '{
+    	"query": {
+    		"match": {
+    			"name": {
+    				// 使用match_phrase查询,而不是普通的match查询
+    				"type": "phrase",
+    				"query": "enterprise london",
+    				// 将slop设置为1,表明允许词条之间有间隔
+    				"slop": 1
+    			}
+    		}
+    	},
+    	"_source": ["name","description"]
+    }'
+    ```
 
-    * phrase_prefix查询 **存在问题**
+  * <a id="phrase_prefix查询 ">phrase_prefix查询 **存在问题**</a>
 
-      ```shell
-      // 和match_phrase查询类似,phrase_prefix查询可以更进一步搜索词组,不过它是和词组中最后一个词条进行前缀匹配,对于提供搜索框里面自动完成功能而言,这个行为是非常有用的.
-      // 当使用这种行为的搜索时,最好通过max_expansions来设置最大的前缀扩展数量
-      curl 'localhost:9200/get-together/group/_search' -d 
-      '{
-      	"query": {
-      		"match": {
-      			"name": {
-      				"type": "phrase_prefix",
-      				"query": "Elasticsearch den",
-      				"max_expansions": 1
-      			}
-      		}
-      	},
-      	"_source": ["name"]
-      }'
-      
-      ```
+    ```shell
+    // 和match_phrase查询类似,phrase_prefix查询可以更进一步搜索词组,不过它是和词组中最后一个词条进行前缀匹配,对于提供搜索框里面自动完成功能而言,这个行为是非常有用的.
+    // 当使用这种行为的搜索时,最好通过max_expansions来设置最大的前缀扩展数量
+    curl 'localhost:9200/get-together/group/_search' -d 
+    '{
+    	"query": {
+    		"match": {
+    			"name": {
+    				"type": "phrase_prefix",
+    				"query": "Elasticsearch den",
+    				"max_expansions": 1
+    			}
+    		}
+    	},
+    	"_source": ["name"]
+    }'
+    
+    ```
 
-    * multi_match来匹配多个字段
+  * <a id="multi_match来匹配多个字段">multi_match来匹配多个字段</a>
 
-      ```shell
-      curl 'localhost:9200/get-together/_search' -d 
-      '{
-      	"query": {
-      		"multi_match": {
-      			"query": "elasticsearch hadoop",
-      			"fields": ["name","description"]
-      		}
-      	}
-      }'
-      ```
+    ```shell
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+    	"query": {
+    		"multi_match": {
+    			"query": "elasticsearch hadoop",
+    			"fields": ["name","description"]
+    		}
+    	}
+    }'
+    ```
 
-      
+* ##### <a id="组合查询或复合查询">组合查询或复合查询</a>
+
+  * ###### <a id=">bool查询">bool查询</a>
+
+    > bool查询允许你在单独查询中组合任意数量的查询,执行查询子句表明哪些部分是**必须(must)匹配**,**应该(should)匹配**或者是**不能(must_not)匹配**上Elasticsearch索引里的数据
+    >
+    > *  如果执行bool查询的某部分是must匹配,只有匹配上这些查询的结果才会被返回;
+    > * 如果指定了bool查询的某部分是should匹配,只有匹配上指定数量子句的文档才会被返回;
+    > * 如果没有执行must匹配的子句,文档至少要匹配一个should子句才能返回;
+    > * must_not子句会使得匹配其的文档被移除结果集合;
+    
+    ```shell
+  curl 'localhost:9200/get-together/_search' -d 
+    '{
+    	"query": {
+    		"bool": {
+    			// 结果文档必须(must)匹配的查询
+    			"must":[
+  				{
+    					"term": {
+  						"attendees": "david"
+    					}
+    				}
+    			],
+  			// 文档应该(should)匹配的第二个查询
+    			"should": [
+    				{
+    					"term": {
+    						"attendees": "clint"
+    					}
+    				},
+    				{
+                        "term": {
+    						"attendees": "andy"
+                        }
+    				}
+    			],
+    			// 结果文档不能(must_not)匹配的查询
+    			"must_not": [
+    				{
+    					"range": {
+    						"date": {
+    							"lt": "2020-06-30"
+    						}
+    					}
+    				}
+    			],
+    			// 最小的should子句匹配数,满足这个数量文档才能作为结果返回
+    			"minimum_should_match": 1
+    		}
+    	}
+    }'
+    ```
+
+    | bool查询子句 | 等价的二元操作                                               | 含义                                                         |
+    | ------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | must         | 为了组合多个子句,使用二元操作and<br />(query1 AND query2 AND query3) | 在must子句中的任何搜索必须匹配上文档,小写的and是功能,大写的AND是操作符 |
+    | must_not     | 使用二元操作not组合多个子句                                  | 在must_not子句中任何搜索不能是文档的一部分.多个子句通过not二元操作符进行组合(NOT query1 AND NOT query2 AND NOT query3) |
+    | should       | 使用二元操作or组合多个子句(query1 OR query2 OR query3)       | 在should子句中搜索,可以匹配也可以不匹配一篇文档,但是匹配数至少达到minimum_should_match参数所设置的数量(如果没有使用must那么默认私用1,如果使用了must,默认是0),和二元查找操作OR类型(query1 OR query2 OR query3) 类似 |
+
+  * ###### <a id="bool过滤器">bool过滤器</a>
+
+    ```shell
+    curl 'localhost:9200/get-together/_seach' -d 
+    '{
+    "query": {
+            "bool": {
+                "must": [
+                    {
+                        "term": {
+                            "attendees": "david"
+                        }
+                    }
+                ],
+                "filter": {
+                    "bool": {
+                        "must": [
+                            {
+                                "term": {
+                                    "attendees": "david"
+                                }
+                            }
+                        ],
+                        "should": [
+                            {
+                                "term": {
+                                    "attendees": "clint"
+                                }
+                            },
+                            {
+                                "term": {
+                                    "attendees": "andy"
+                                }
+                            }
+                        ],
+                        "must_not": [
+                            {
+                                "range": {
+                                    "date": {
+                                        "lt": "2020-06-30"
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }'
+    ```
+    
+    
