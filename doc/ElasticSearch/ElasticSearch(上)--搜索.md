@@ -12,6 +12,10 @@
   * <a href="#match查询和term过滤器">match查询和term过滤器</a>
   * <a href="#常用的基础查询和过滤器">常用的基础查询和过滤器</a>
     * <a href="#match_all查询">match_all查询</a>
+    * <a href="#match查询">match查询</a>
+    * <a href="#match_phrase查询">match_phrase查询</a>
+    * <a href="#match_phrase_prefix查询">match_phrase_prefix查询</a>
+    * <a href="#multi_match">multi_match来匹配多个字段</a>
     * <a href="#query_string查询">query_string查询</a>
     * <a href="#term查询和term过滤器">term查询和term过滤器</a>
     * <a href="#terms查询<">terms查询</a>
@@ -234,6 +238,154 @@
     }'
     ```
 
+  * <a id="match查询">match查询</a>
+
+    ```shell
+    // 1. match查询,子弹值默认不区分大小写
+    curl 'localhost:9200/_search' -d 
+    '{
+    	"query": {
+    		"bool": {
+    			"must": {
+    				"match": {
+    					"firstname":"xxx"
+    				}
+    			},
+    			"filter": {
+    				"term":{
+    					"xxx": ""
+    				}
+    			}
+    		}
+    	}
+    }'
+    // 2. fistname也可以替换为_all表示匹配所有字段
+    curl 'localhost:9200/_search' -d 
+    '{
+    	"query": {
+    		"bool": {
+    			"must": {
+    				"match": {
+    					"_all":"xxx"
+    				}
+    			},
+    			"filter": {
+    				"term":{
+    					"xxx": ""
+    				}
+    			}
+    		}
+    	}
+    }'
+    // 3. match查询也是一种boolean查询,也就是说match查询接受到text类型的数据后,会对数据进行分析,然后根据提供的text类型数据构造一个boolean查询
+    // 即所谓的"分词".通过operator标记(默认值为or)来控制boolean语句
+    // 分词: 针对中文,每个文字被拆分为一个待匹配值,针对英文,空格相隔的每个单词被拆分为一个待匹配值
+    // 可在建立索引时,设置mapping,为索引的字段指定"index":"not_analyzed"来禁用分词
+    POST /_serch?pretty
+    {
+    	// 会匹配包含"小"和"林"的文档记录
+    	"query":{
+            "match":{
+            	"firstname":"小林"
+            }
+    	}
+    }
+    POST /_serch?pretty
+    {
+    	// 会匹配"小林"
+    	"query":{
+            "match":{
+            	"firstname":"小林",
+            	"operator":"and"
+            }
+    	}
+    }
+    ```
+
+  * <a id="match_phrase查询">match_phrase查询</a>
+
+    ```shell
+    // 与match类似,不同点是没有"分词"功能 等价于match..."operator":"and"
+    POST /get-together/_search?pretty
+    {
+    	"query":{
+    		"match_phrase":{
+    			"firstname":{
+    				"query":"小林"
+    			}
+    		}
+    	}
+    	"_source":["firstname"]
+    }
+    // 等价于
+    POST /get-together/_search?pretty
+    {
+    	"query":{
+    		"match":{
+    			"firstname":{
+    				"query":"小林",
+    				"type":"phrase"
+    			}
+    		}
+    	}
+    	"_source":["firstname"]
+    }
+    ```
+
+  * <a id="match_phrase_prefix查询">match_phrase_prefix查询</a>
+
+    ```shell
+    // 与match_phrase类似,不同点在于输入文本中,最后一项term允许前缀匹配
+    POST /get-together/_search?pretty
+    {
+    	"query":{
+    		"match_phrase_prefix":{
+    			"message":"clever brown fo",
+    			// 为了防止前缀匹配到最后项的数量过多,造成因新词组过多导致的查询时间过长,可以添加max_expansions(默认为50)来控制匹配项的数量
+    			"max_expansions":"10"
+    		}
+    	}
+    	"_source":["firstname"]
+    }
+    // 查询会先创建词组clever brown(即目标记录必须包含 clever且后面跟brown,clever和brown之间至少一个空格或tab),然后查询fo开头的项,比如fox,fog....然后添加到词组,组成新的词组clever brown fox,clever brown fog,...然后以match_phrese的方式去查找这些匹配这些新词组的文档记录
+    ```
+    
+  * <a id="multi_match">multi_match来匹配多个字段</a>
+
+      ```shell
+      // multi_match与match类似,不同的是针对一个待查询的内容,可在多个指定名称字段中进行匹配
+      // 同match,multi_match要查询的内容不分大小写
+      curl 'localhost:9200/get-together/_search' -d 
+      '{
+          "query": {
+              "multi_match": {
+              	// query: 待查询的内容
+                  "query": "elasticsearch hadoop",
+                  // fields: 指定待匹配的字段,支持通配符
+                  "fields": [
+                      "name",
+                  "description"
+                  ]
+          }
+        }
+  }'
+    // 在get-together索引中,在"na"和"desc*"开头的字段中查询包含"elasticsearch hadoop"的文档记录
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+        "query": {
+            "multi_match": {
+            	// query: 待查询的内容
+                "query": "elasticsearch hadoop",
+                // fields: 指定待匹配的字段,支持通配符
+                "fields": [
+                    "na*",
+                    "desc*"
+                ]
+          }
+        }
+  }'
+    ```
+
   * <a id="query_string查询">query_string查询</a>
 
     ```shell
@@ -242,8 +394,84 @@
     	"query": {
     		"query_string": {
     			// 由于查询中没有指定字段,所以使用了默认字段"description"
-    			"default_field": "description"
-    			"query": "nosql"
+    			"default_field": "description",
+    			// 带解析的查询字符串
+    			"query": "nosql",
+    			// 多字段,支持通配符
+    			"fields":["name","first*"],
+    			// 指定默认的操作符
+    			"default_operator":"OR"
+    		}
+    	}
+    }'
+    // Query String 语法
+    // 1. Field Name
+    // 1) field_name:content 字段field_name包含内容content
+    curl -XPOST 'http://localhost:9200/get-together/_search?pretty' -d 
+    '{
+    	"query": {
+    		"query_string": {
+    			"query": "addr:suzhou"
+    		}
+    	}
+    }'
+    // 2) field_name:(content1 OR content2)/field_name:(content1 content2)  字段field_name包含内容content1或content2
+    curl -XPOST 'http://localhost:9200/get-together/_search?pretty' -d 
+    '{
+    	"query": {
+    		"query_string": {
+    			"query": "addr:(suzhou OR shanghai)"
+    		}
+    	}
+    }'
+    // 3) field_name:"content1 content2" 字段field_name包含内容content1 content2
+    curl -XPOST 'http://localhost:9200/get-together/_search?pretty' -d 
+    '{
+    	"query": {
+    		"query_string": {
+    			"query": "addr:\"suzhou wuzhong\""
+    		}
+    	}
+    }'
+    // 4) field_name:"content1 content2" 字段field_name包含内容content1 content2
+    curl -XPOST 'http://localhost:9200/get-together/_search?pretty' -d 
+    '{
+    	"query": {
+    		"query_string": {
+    			"query": "addr:\"suzhou wuzhong\""
+    		}
+    	}
+    }'
+    // 5) _exists_:field_name 存在字段field_name且field_name不为空,不为null
+    curl -XPOST 'http://localhost:9200/get-together/_search?pretty' -d 
+    '{
+    	"query": {
+    		"query_string": {
+    			"query": "_exists_:addr"
+    		}
+    	}
+    }'
+    // 5) Range 支持date,numeric,字符串字段.闭区间[min TO max],开区间{min TO max}
+    curl -XPOST 'http://localhost:9200/get-together/_search?pretty' -d 
+    '{
+    	"query": {
+    		"query_string": {
+    			"query": "birthday:[2020-12-01 TO 2020-12-31]"
+    			// "query": "birthday:[* TO 2020-12-31}"
+    			// "query": "age:[10 TO 30]"
+    			// "query": "age:[15 TO *]" <==> "query": "age:>=15"
+    			// "query": "age:[15 TO 25}" <==> "query": "age:(>=15 AND <25)"
+    		}
+    	}
+    }'
+    // 6) bool操作符
+    // +content1: 包含content
+    // -content: 不包含content
+    curl -XPOST 'http://localhost:9200/get-together/_search?pretty' -d 
+    '{
+    	"query": {
+    		"query_string": {
+    			"query": "addr:suzhou +wuzhong -huqiu"
     		}
     	}
     }'
@@ -252,6 +480,8 @@
   * <a id="term查询和term过滤器">term查询和term过滤器</a>
 
     ```shell
+    // term 用于精确查询
+    // 说明: 字段值类型若为text,被视为full text,会传递给被解析器进行解析,当置为中文,空格,tab键分割的单词是,会被拆分成多个待查询的term.如"Quick Brown Fox"会被解析为[Quick,Brown,Fox];若为keyword则视为精确值,精确值(如数字,日期,keyword)拥有准确的整定值
     // 词条查询
     curl 'localhost:9200/get-together/_search' -d 
     '{
@@ -380,19 +610,7 @@
     
     ```
 
-  * <a id="multi_match来匹配多个字段">multi_match来匹配多个字段</a>
-
-    ```shell
-    curl 'localhost:9200/get-together/_search' -d 
-    '{
-    	"query": {
-    		"multi_match": {
-    			"query": "elasticsearch hadoop",
-    			"fields": ["name","description"]
-    		}
-    	}
-    }'
-    ```
+  * 
 
 * ##### <a id="组合查询或复合查询">组合查询或复合查询</a>
 
@@ -509,6 +727,11 @@
   
     ```shell
     // range查询
+    // gte 大于等于(Greater-than or equal to)
+    // gt  大于 (Greater-than)
+    // lte 小于等于(Less-than or equal to)
+    // lt  小于(Less-than)
+    // 可作用与支持date,numeric,字符串字段
     curl 'localhost:9200/get-together/_search' -d 
     '{
         "query": {
@@ -520,6 +743,67 @@
             }
         }
     }'
+    // 查找birthday大于等于2020-08-17 11:20:00 小于等于2020-08-18的文档记录
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+        "query": {
+            "range": {
+                "updateTime": {
+                    "gte": "2020-08-17T11:20:00||-1d",
+                    "lte": "2020-08-18"
+                }
+            }
+        }
+    }'
+    // 比较操作符合"向下舍"的关系
+    // gt: 2020-11-18||/M  ES解析:  gt:  2020-11-30T23:59:59.999
+    // gte: 2020-11-18||/M ES解析:  gte: 2020-11-01
+    // lt: 2020-11-18||/M  ES解析:  lt:  2020-11-01
+    // lte: 2020-11-18||/M ES解析:  lte: 2020-11-30T23:59:59.999
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+        "query": {
+            "range": {
+                "updateTime": {
+                    "gte": "now-8h/d",
+                    "lte": "now/d"
+                }
+            }
+        }
+    }'
+    // 查询参数date格式化
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+        "query": {
+            "range": {
+                "updateTime": {
+                    "gte": "17/08/2020",
+                    "lte": "18/08/2020",
+                    "format":"dd/MM/yyyy||yyyy"
+                }
+            }
+        }
+    }'
+    // Date Math
+    // 可在基准日志(anchor date 比如now或者以||结束的date字符串)之后添加1个或多个数学表达式:
+    // +1h 加上1小时
+    // -1d 减去1天
+    // /d  向下舍至最近的一天
+    // 例子:
+    // now+1h    当前时间加上一个小时
+    // now+1h+1m 当前时间加上1个小时1分钟
+    // now+1h/d  当前时间加上1个小时,向下舍至最近的一天
+    // 2020-01-01||+1M/d 2020-01-01加上一个月,向下舍至最近的一天
+    // 支持的时间单位有:
+    // 单位		含义
+    //  y		  年
+    //  M		  月
+    //  w		  周
+    //  d		  日
+    //  h		  小时
+    //  H		  小时
+    //  m		  分钟
+    //  s		  秒
     // range过滤器
     curl 'localhost:9200/get-together/_search' -d 
     '{
@@ -545,6 +829,7 @@
   
     ```shell
     // prefix查询
+    // 默认情况下,prefix的匹配对象是针对单个单词的
     curl 'localhost:9200/get-together/_search' -d 
     '{
     	"query": {
@@ -667,6 +952,19 @@
     					}
     				}
     			}
+    		}
+    	}
+    }'
+    ```
+  
+  * <a id="regexp">regexp</a>
+  
+    ```shell
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+    	"query": {
+    		"regexp":{
+    			"name":"苏州."
     		}
     	}
     }'
