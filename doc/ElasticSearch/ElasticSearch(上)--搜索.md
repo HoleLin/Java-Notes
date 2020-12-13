@@ -1,6 +1,7 @@
 ## ElasticSearch
 
-* <a id ="目录">目录</a>
+#### 目录
+
 * <a href="#使用URL限制搜索范围">安装</a>
 * <a href="#使用URL限制搜索范围">搜索基础</a>
   * <a href="#使用URL限制搜索范围">使用URL限制搜索范围</a>
@@ -20,6 +21,10 @@
   * <a href="#组合查询或复合查询">组合查询或复合查询</a>
     * <a href="#bool查询">bool查询</a>
     * <a href="#bool过滤器">bool过滤器</a>
+    * <a href="#range查询和过滤器">range查询和过滤器</a>
+    * <a href="#prefix查询">prefix查询</a>
+    * <a href="#wildcard查询">wildcard查询</a>
+    * <a href="#exists过滤器">exists过滤器</a>
 
 ### 1.<a id="安装"> 安装</a>
 
@@ -170,7 +175,7 @@
 * ##### <a id="match查询和term过滤器">match查询和term过滤器</a>
 
   ```shell
-  curl 'localhost:9200/get-together/event/_search' -d 
+  curl 'localhost:9200/get-together/_search' -d 
   '{
   	"query": {
   		"match": {
@@ -248,7 +253,7 @@
 
     ```shell
     // 词条查询
-    curl 'localhost:9200/get-together/group/_search' -d 
+    curl 'localhost:9200/get-together/_search' -d 
     '{
     	"query": {
     		"term": {
@@ -283,7 +288,7 @@
 
     ```shell
     // 使用多词条搜索多个词条
-    curl 'localhost:9200/get-together/group/_search' -d 
+    curl 'localhost:9200/get-together/_search' -d 
     '{
     	"query": {
     		"terms": {
@@ -337,7 +342,7 @@
   * <a id="词组查询行为">词组查询行为</a>
 
     ```shell
-    curl 'localhost:9200/get-together/group/_search' -d 
+    curl 'localhost:9200/get-together/_search' -d 
     '{
     	"query": {
     		"match": {
@@ -359,7 +364,7 @@
     ```shell
     // 和match_phrase查询类似,phrase_prefix查询可以更进一步搜索词组,不过它是和词组中最后一个词条进行前缀匹配,对于提供搜索框里面自动完成功能而言,这个行为是非常有用的.
     // 当使用这种行为的搜索时,最好通过max_expansions来设置最大的前缀扩展数量
-    curl 'localhost:9200/get-together/group/_search' -d 
+    curl 'localhost:9200/get-together/_search' -d 
     '{
     	"query": {
     		"match": {
@@ -409,7 +414,7 @@
     			"must":[
   				{
     					"term": {
-  						"attendees": "david"
+  							"attendees": "david"
     					}
     				}
     			],
@@ -500,4 +505,172 @@
     }'
     ```
     
+  * ##### <a id="range查询和过滤器">range查询和过滤器</a>
+  
+    ```shell
+    // range查询
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+        "query": {
+            "range": {
+                "updateTime": {
+                    "gt": "1591321611000",
+                    "lt": "1607132852000"
+                }
+            }
+        }
+    }'
+    // range过滤器
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+        "query": {
+            "bool": {
+                "must": {
+                    "match_all": {}
+                },
+                "filter": {
+                    "range": {
+                        "updateTime": {
+                            "gt": "1591321611000",
+                            "lt": "1607132852000"
+                        }
+                    }
+                }
+            }
+        }
+    }'
+    ```
+  
+  * ##### <a id="prefix查询">prefix查询</a>
+  
+    ```shell
+    // prefix查询
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+    	"query": {
+    		"prefix": {
+    			"title": "liber"
+    		}
+    	}
+    }'
+    // prefix过滤器
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+        "query": {
+            "bool": {
+                "must": {
+                    "match_all": {}
+                },
+                "filter": {
+                    "prefix": {
+                        "title": "liber"
+                    }
+                }
+            }
+        }
+    }'
+    ```
+  
+  * ##### <a id="wildcard查询">wildcard查询</a>
+  
+    > wildcard查询可以使用类似shell通配符globbing的工作方式.列如运行 `ls *foo?ar`会匹配"myfoobar","foocar"和"thefoobar"这样的单词.
+    >
+    > 可以混合使用多个*和?字符来匹配更为复杂的通配模板,但当字符串被分析后,默认情况下空格会被去除,如果空格没被索引,那么?是无法匹配上空格的.
+  
+    ```shell
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+    	"query": {
+    		"wildcard": {
+    			"title": {
+    				"wildcard": "ba*n"
+    			}
+    		}
+    	}
+    }'
+    ```
+  
+  * <a id="exists过滤器">字段存在性过滤器--exists过滤器</a>
+  
+    ```shell
+    // exists过滤器允许过滤文档,只查找那些特定字段有值的文档,无论其值是多少
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+        "query": {
+            "bool": {
+                "must": {
+                    "match_all": {}
+                },
+                "filter": {
+                    "exists": {
+                        "field": "xxx"
+                    }
+                }
+            }
+        },
+        "_source":["xxx","xxx","xxxx"]
+    }'
+    ```
+  
+  * missing过滤器 **废弃**
+  
+    ```shell
+    // missing过滤器可以搜索字段里面没有值,或者是映射时指定的默认的文档(也叫作null值,即映射里面的null_value)
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+    	"query": {
+    		"bool": {
+    			"must": {
+    				"match_all": {}
+    			},
+    			"filter": {
+    				"missing": {
+    					"field": "reviews",
+    					"existence": "true",
+    					"null_value": "true"
+    				}
+    			}
+    		}
+    	}
+    }'
+    // Missing Query Deprecated in 2.2.0. Use exists query inside a must_not clause instead
+    {
+        "query": {
+            "bool": {
+                "must": {
+                    "match_all": {}
+                },
+                "must_not": {
+                    "exists": {
+                        "field": "reviews"
+                    }
+                }
+            }
+        }
+    }
+    ```
+  
+  * 将任何查询转变为过滤器 **废弃**
+  
+    ```shell
+    curl 'localhost:9200/get-together/_search' -d 
+    '{
+    	"query": {
+    		"bool": {
+    			"must": {
+    				"match_all": {}
+    			},
+    			"filter": {
+    				"query": {
+    					"query_string": {
+    						"query": "name:\"dever clojure\""
+    					}
+    				}
+    			}
+    		}
+    	}
+    }'
+    ```
+  
     
+
