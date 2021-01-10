@@ -8,6 +8,7 @@
   * <a href="#搜索请求的基本模块">搜索请求的基本模块</a>
   * <a href="#基于URL的搜索请求">基于URL的搜索请求</a>
   * <a href="#基于请求主体的搜索请求">基于请求主体的搜索请求</a>
+* <a href="#搜索用途分类">搜索用途</a>
 * <a href="#各种查询">各种查询</a>
   * <a href="#match查询和term过滤器">match查询和term过滤器</a>
   * <a href="#常用的基础查询和过滤器">常用的基础查询和过滤器</a>
@@ -174,7 +175,40 @@
     }
     ```
 
-### 3. <a id="查询和过滤器DSL">查询和过滤器DSL</a>
+### 3.  <a id="搜索用途">搜索用途分类</a>
+
+* <a id="查询条件精确,查询数据快">查询条件精确,查询数据快</a>
+  * term查询
+  * terms查询
+  * match_all查询
+  * match查询
+  * bool match查询
+  * multi_match查询
+  * 根据文档id查询(单个id)
+  * 根据文档ids查询(多个id)
+* <a id="查询条件相对模糊,查询速度较慢">查询条件相对模糊,查询速度较慢</a>
+  * prefix查询
+  * fuzzy查询
+  * wildcard查询
+  * range查询
+  * regexp查询
+* <a id="杂项查询">杂项查询</a>
+  * 深分页scroll查询
+  * delete-by-query
+  * bool查询
+  * boosting查询
+  * filter查询
+  * highlight高亮查询
+* <a id="聚合查询">聚合查询Aggregations</a>
+  * cardinality(去重计数)查询
+  * range(范围统计)查询
+  * extended_stats(统计聚合)查询
+* <a id="地图检索geo查询">地图检索geo查询</a>
+  * geo_distance查询
+  * geo_bounding_box查询
+  * geo_polygon查询
+
+### 4. <a id="查询和过滤器DSL">查询和过滤器DSL</a>
 
 * ##### <a id="match查询和term过滤器">match查询和term过滤器</a>
 
