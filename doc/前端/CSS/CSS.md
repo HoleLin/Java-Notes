@@ -403,5 +403,324 @@
     
 ### 3.CSS盒子模型
 
+* 块级盒子(block box)和内联盒子(inline box),这两种盒子会在**页面流**（page flow）和**元素之间的关系**方面表现出不同的行为
+
+* **块级盒子(block box)**
+  * 一个被定义成块级的（block）盒子会表现出以下行为:
+    * 盒子会在内联的方向上扩展并占据父容器在该方向上的所有可用空间，在绝大数情况下意味着盒子会和父容器一样宽
+    * 每个盒子都会换行
+    * width和height属性发挥作用
+    * 内边距（padding）, 外边距（margin） 和 边框（border） 会将其他元素从当前盒子周围“推开”
+    * 除非特殊指定，诸如标题(`<h1>`等)和段落(`<p>`)默认情况下都是块级的盒子。
+  
+* **内联盒子(inline box)**
+  * 如果一个盒子对外显示为 `inline`，那么他的行为如下:
+    * 盒子不会产生换行。
+    * width和height属性将不起作用。
+    * 垂直方向的内边距、外边距以及边框会被应用但是不会把其他处于 `inline` 状态的盒子推开。
+    * 水平方向的内边距、外边距以及边框会被应用且会把其他处于 `inline` 状态的盒子推开。
+    * 用做链接的 `<a>` 元素、 `<span>`、 `<em>` 以及 `<strong>` 都是默认处于 `inline` 状态的。
+    * 我们通过对盒子`display` 属性的设置，比如 `inline` 或者 `block` ，来控制盒子的外部显示类型。
+
+* **display**
+  * **`display: inline`**
+  * **`display: block`**
+  * **`display: inline-flex`**
+  * **`display: flex`**
+* **`display: inline-block`**
+    * isplay有一个特殊的值，它在内联和块之间提供了一个中间状态。这对于以下情况非常有用:您不希望一个项切换到新行，但希望它可以设定宽度和高度，并避免上面看到的重叠。
+    * 一个元素使用 `display: inline-block`，实现我们需要的块级的部分效果：
+      - 设置`width` 和`height` 属性会生效。
+      - `padding`, `margin`, 以及`border` 会推开其他元素。
+  
+* **CSS盒模型**
+
+  * 完整的 CSS 盒模型应用于块级盒子，内联盒子只使用盒模型中定义的部分内容。模型定义了盒的每个部分 —— margin, border, padding, and content —— 合在一起就可以创建我们在页面上看到的内容。为了增加一些额外的复杂性，有一个标准的和替代（IE）的盒模型。
+
+  * CSS中组成一个块级盒子需要:
+
+    * **Content box**: 这个区域是用来显示内容，大小可以通过设置 [`width`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/width) 和 [`height`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/height).
+
+    * **Padding box**: 包围在内容区域外部的空白区域； 大小通过 [`padding`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/padding) 相关属性设置。
+
+    * **Border box**: 边框盒包裹内容和内边距。大小通过 [`border`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border) 相关属性设置。
+
+    * **Margin box**: 这是最外面的区域，是盒子和其他元素之间的空白区域。大小通过 [`margin`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/margin) 相关属性设置。
+
+      ![Diagram of the box model](https://mdn.mozillademos.org/files/16558/box-model.png)
+
+* 标准盒模型
+
+  ```css
+  .box {
+    width: 350px;
+    height: 150px;
+    margin: 25px;
+    padding: 25px;
+    border: 5px solid black;
+  }
+  如果使用标准模型宽度 = 410px (350 + 25 + 25 + 5 + 5)，高度 = 210px (150 + 25 + 25 + 5 + 5)，padding 加 border 再加 content box。
+  ```
+
+* 替代盒模型
+
+  ```css
+  .box {
+    box-sizing: border-box;
+  } 
+  ```
+
+* 外边距
+
+  * 外边距是盒子周围一圈看不到的空间。它会把其他元素从盒子旁边推开。 外边距属性值可以为正也可以为负。设置负值会导致和其他内容重叠。无论使用标准模型还是替代模型，外边距总是在计算可见部分后额外添加。
+  * [`margin-top`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/margin-top)
+  * [`margin-right`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/margin-right)
+  * [`margin-bottom`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/margin-bottom)
+  * [`margin-left`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/margin-left)
+  * 外边距折叠: 理解外边距的一个关键是外边距折叠的概念。如果你有两个外边距相接的元素，这些外边距将合并为一个外边距，即最大的单个外边距的大小。
+
+* 边框 边框是在边距和填充框之间绘制的
+
+  * 可以使用[`border`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border)属性一次设置所有四个边框的宽度、颜色和样式。
+
+  * 分别设置每边的宽度、颜色和样式，可以使用：
+    - [`border-top`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-top)
+    - [`border-right`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-right)
+    - [`border-bottom`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-bottom)
+    - [`border-left`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-left)
+    
+   *  设置所有边的颜色、样式或宽度，请使用以下属性：
+      - [`border-width`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-width)
+      - [`border-style`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-style)
+      - [`border-color`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-color)
+      
+  * 设置单边的颜色、样式或宽度，可以使用最细粒度的普通属性之一：
+
+    * [`border-top-width`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-top-width)
+    * [`border-top-style`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-top-style)
+    * [`border-top-color`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-top-color)
+    * [`border-right-width`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-right-width)
+    * [`border-right-style`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-right-style)
+    * [`border-right-color`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-right-color)
+    * [`border-bottom-width`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-bottom-width)
+    * [`border-bottom-style`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-bottom-style)
+    * [`border-bottom-color`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-bottom-color)
+    * [`border-left-width`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-left-width)
+    * [`border-left-style`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-left-style)
+    * [`border-left-color`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/border-left-color)
+
+* 内边距
+
+  * 内边距位于边框和内容区域之间。与外边距不同，您不能有负数量的内边距，所以值必须是0或正的值。应用于元素的任何背景都将显示在内边距后面，内边距通常用于将内容推离边框。
+
+  * 我们可以使用[`padding`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/padding)简写属性控制元素所有边，或者每边单独使用等价的普通属性：
+
+    * [`padding-top`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/padding-top)
+  * [`padding-right`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/padding-right)
+    * [`padding-bottom`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/padding-bottom)
+    * [`padding-left`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/padding-left)
+  
+### 4. 背景样式
+
+* 背景颜色`background-color`
+
+  * [`background-color`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/background-color)属性定义了CSS中任何元素的背景颜色。属性接受任何有效的`<color>值`。背景色扩展到元素的内容和内边距的下面。
+
+* 背景图片 `background-image`
+  
+* [`background-image`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/background-image)属性允许在元素的背景中显示图像。在下面的例子中，我们有两个方框——一个是比方框大的背景图像，另一个是星星的小图像。
+  
+* 控制背景平铺
+
+  * [`background-repeat`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/background-repeat)属性用于控制图像的平铺行为。可用的值是:
+    - `no-repeat` — 不重复。
+    - `repeat-x` —水平重复。
+    - `repeat-y` —垂直重复。
+    - `repeat` — 在两个方向重复。
+
+* 调整背景图像大小
+
+  * 使用 [`background-size`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/background-size)属性，它可以设置长度或百分比值，来调整图像的大小以适应背景。
+  * 也可以使用关键字:
+    - `cover` —浏览器将使图像足够大，使它完全覆盖了盒子区，同时仍然保持其高宽比。在这种情况下，有些图像可能会跳出盒子外
+    - `contain` — 浏览器将使图像的大小适合盒子内。在这种情况下，如果图像的长宽比与盒子的长宽比不同，则可能在图像的任何一边或顶部和底部出现间隙。
+
+* 背景图像定位
+
+  * [`background-position`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/background-position)属性允许您选择背景图像显示在其应用到的盒子中的位置。它使用的坐标系中，框的左上角是(0,0)，框沿着水平(x)和垂直(y)轴定位。
+  * **注意：**默认的背景位置值是(0,0)。
+  * 最常见的背景位置值有两个单独的值——一个水平值后面跟着一个垂直值。
+  * **注意：**`background-position`是[`background-position-x`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/background-position-x)和[`background-position-y`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/background-position-y)的简写，它们允许您分别设置不同的坐标轴的值。
+
+  ```css
+  .box {
+    background-image: url(star.png);
+    background-repeat: no-repeat;
+    background-position: top center;
+    //  background-position: 20px 10%;
+    //  background-position: top 20px;  
+    //  background-position: top 20px right 10px;
+  } 
+  ```
+
+* 渐变背景
+
+  ```css
+  .a {
+    background-image: linear-gradient(105deg, rgba(0,249,255,1) 3%, rgba(51,56,57,1) 50%);
+  }
+  
+  .b {
+    background-image: radial-gradient(circle, rgba(0,249,255,1) 39%, rgba(51,56,57,1) 96%);
+    background-size: 100px 50px;
+  }
+  ```
+
+* 多个背景图像
+
+  * 在单个属性值中指定多个`background-image`值，用逗号分隔每个值。
+
+  * 背景图像会以互相重叠而告终。背景将与最后列出的背景图像层在堆栈的底部，背景图像在代码列表中最先出现的在顶端。
+
+  * **注意：**渐变可以与常规的背景图像很好地混合在一起。
+
+  * 不同属性的每个值，将与其他属性中相同位置的值匹配。
+
+    ```css
+    background-image: url(image1.png), url(image2.png), url(image3.png), url(image1.png);
+    background-repeat: no-repeat, repeat-x, repeat;
+    background-position: 10px 20px,  top right;
+    ```
+
+* 背景附加
+
+  * 另一个可供选择的背景是指定他们如何滚动时，内容滚动。这是由[`background-attachment`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/background-attachment)属性控制的，它可以接受以下值:
+    * `scroll`: 使元素的背景在页面滚动时滚动。如果滚动了元素内容，则背景不会移动。实际上，背景被固定在页面的相同位置，所以它会随着页面的滚动而滚动。
+    * `fixed`: 使元素的背景固定在视图端口上，这样当页面或元素内容滚动时，它就不会滚动。它将始终保持在屏幕上相同的位置。
+    * `local`: 这个值是后来添加的(它只在Internet Explorer 9+中受支持，而其他的在IE4+中受支持)，因为滚动值相当混乱，在很多情况下并不能真正实现您想要的功能。局部值将背景固定在设置的元素上，因此当您滚动元素时，背景也随之滚动。
+  * [`background-attachment`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/background-attachment)属性只有在有内容要滚动时才会有效果
+
+### 5. 书写模式
+
+* CSS中的书写模式是指文本的排列方向是横向还是纵向的。[`writing-mode`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/writing-mode) 属性使我们从一种模式切换到另一种模式
+* `writing-mode`的三个值分别是：
+  - `horizontal-tb`: 块流向从上至下。对应的文本方向是横向的。
+  - `vertical-rl`: 块流向从右向左。对应的文本方向是纵向的。
+  - `vertical-lr`: 块流向从左向右。对应的文本方向是纵向的。
+
+### 6. 溢出
+
+* overflow属性
+  * [`overflow`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/overflow)属性是你控制一个元素溢出的方式，它告诉浏览器你想怎样处理溢出。`overflow`的默认值为`visible`，这就是我们的内容溢出的时候，我们在默认情况下看到它们的原因。
+    * `overflow: hidden` 隐藏
+    * `overflow: visible` 显示
+    * `overflow: scroll `滚动
+      * `overflow-y: scroll`
+      * `overflow-x: scroll`
+    * `overflow: auto`
+  * **注意：** 你可以用`overflow`属性指定x轴和y轴方向的滚动，同时使用两个值进行传递。如果指定了两个关键字，第一个对`overflow-x`生效而第二个对`overflow-y`生效。否则，`overflow-x`和`overflow-y`将会被设置成同样的值。例如，`overflow: scroll hidden`会把`overflow-x`设置成`scroll`，而`overflow-y`则为`hidden`。
+
+### 7.  css的值
+
+* 数字，长度和百分比
+
+  | 数值类型       | 描述                                                         |
+  | :------------- | :----------------------------------------------------------- |
+  | `<integer>`    | `<integer>`是一个整数，比如1024或-55。                       |
+  | `<number>`     | `<number>`表示一个小数——它可能有小数点后面的部分，也可能没有，例如0.255、128或-1.2。 |
+  | `<dimension>`  | `<dimension>`是一个`<number>`，它有一个附加的单位，例如45deg、5s或10px。`<dimension>`是一个伞形类别，包括`<length>`、`<angle>`、`<time>`和`<resolution>`类型。 |
+  | `<percentage>` | `<percentage>`表示一些其他值的一部分，例如50%。百分比值总是相对于另一个量，例如，一个元素的长度相对于其父元素的长度。 |
+
+* 长度
+
+  * 绝对长度单位
+
+    * 以下都是**绝对**长度单位——它们与其他任何东西都没有关系，通常被认为总是相同的大小。
+
+    | 单位 | 名称         | 等价换算            |
+    | :--- | :----------- | :------------------ |
+    | `cm` | 厘米         | 1cm = 96px/2.54     |
+    | `mm` | 毫米         | 1mm = 1/10th of 1cm |
+    | `Q`  | 四分之一毫米 | 1Q = 1/40th of 1cm  |
+    | `in` | 英寸         | 1in = 2.54cm = 96px |
+    | `pc` | 十二点活字   | 1pc = 1/16th of 1in |
+    | `pt` | 点           | 1pt = 1/72th of 1in |
+    | `px` | 像素         | 1px = 1/96th of 1in |
+
+  * 相对长度单位
+
+    | 单位   | 相对于                                                       |
+    | :----- | :----------------------------------------------------------- |
+    | `em`   | 在 font-size 中使用是相对于父元素的字体大小，在其他属性中使用是相对于自身的字体大小，如 width |
+    | `ex`   | 字符“x”的高度                                                |
+    | `ch`   | 数字“0”的宽度                                                |
+    | `rem`  | 根元素的字体大小                                             |
+    | `lh`   | 元素的line-height                                            |
+    | `vw`   | 视窗宽度的1%                                                 |
+    | `vh`   | 视窗高度的1%                                                 |
+    | `vmin` | 视窗较小尺寸的1%                                             |
+    | `vmax` | 视图大尺寸的1%                                               |
+
+* 颜色
+
+  * 关键字
+
+    ```css
+    color: white
+    ```
+
+  * 十六进制RGB
+
+    ```css
+    color: #02798b
+    ```
+
+  * RGB和RGBA
+
+    ```css
+    background-color: rgb(2, 121, 139);
+    background-color: rgba(2, 121, 139, .3);
+    ```
+
+  * HSL和HSLA
+
+    * `hsl()` 函数接受色调、饱和度和亮度值作为参数，而不是红色、绿色和蓝色值，这些值的不同方式组合，可以区分1670万种颜色：
+      - **色调**： 颜色的底色。这个值在0和360之间，表示色轮周围的角度。
+      - **饱和度**： 颜色有多饱和？ 它的值为0 - 100%，其中0为无颜色(它将显示为灰色阴影)，100%为全色饱和度
+      - **亮度**：颜色有多亮？ 它从0 - 100%中获取一个值，其中0表示没有光(它将完全显示为黑色)，100%表示完全亮(它将完全显示为白色)
+
+      ```css
+        background-color: hsl(188, 97%, 28%);
+        background-color: hsla(188, 97%, 28%, .3);
+      ```
+  
+* 图片
+
+  * `<image>` 数据类型用于图像为有效值的任何地方
+  
+  ```css
+  .image {
+    background-image: url(star.png);
+  }
+  
+  .gradient {
+    background-image: linear-gradient(90deg, rgba(119,0,255,1) 39%, rgba(0,212,255,1) 100%);
+  }
+  ```
+
+* 位置
+  * `<position>` 数据类型表示一组2D坐标，用于定位一个元素，如背景图像(通过 `background-position`)。它可以使用关键字(如 `top`, `left`, `bottom`, `right`, 以及`center` )将元素与2D框的特定边界对齐，以及表示框的顶部和左侧边缘偏移量的长度。
+
 ​    
 
+​    
+
+​    
+
+​    
+
+​    
+
+​    
+
+​    
