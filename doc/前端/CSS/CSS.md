@@ -709,11 +709,20 @@
   ```
 
 * 位置
+  
   * `<position>` 数据类型表示一组2D坐标，用于定位一个元素，如背景图像(通过 `background-position`)。它可以使用关键字(如 `top`, `left`, `bottom`, `right`, 以及`center` )将元素与2D框的特定边界对齐，以及表示框的顶部和左侧边缘偏移量的长度。
 
-​    
+### 8.在css中调整大小
 
-​    
+* min-和max尺寸
+  * `min-height`: 设置一个[`min-height`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/min-height)属性。盒子就会一直保持大于这个最小高度，但是如果有比这个盒子在最小高度状态下所能容纳的更多内容，那么盒子就会变大。
+  * `min-width`: [`max-width`](https://developer.mozilla.org/zh-CN/docs/Web/CSS/max-width)的常见用法为，在没有足够空间以原有宽度展示图像时，让图像缩小，同时确保它们不会比这一宽度大。
+    * 如果你使用了`max-width: 100%`，那么图像可以变得比原始尺寸更小，但是不会大于原始尺寸的100%。
+* 视口单位
+  * 视口，即你在浏览器中看到的部分页面，也是有尺寸的。在CSS中，我们有与视口尺寸相关的度量单位，即意为视口宽度的`vw`单位，以及意为视口高度的 `vh`单位
+  * `1vh`等于视口高度的1%，`1vw`则为视口宽度的1%.
+
+### 9.图像、媒体和表单元素
 
 ​    
 
