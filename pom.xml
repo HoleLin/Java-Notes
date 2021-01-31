@@ -22,6 +22,14 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <springfox.swagger.version>2.2.2</springfox.swagger.version>
         <spring.kafka.version>2.5.5.RELEASE</spring.kafka.version>
+        <commons.collections4.version>4.1</commons.collections4.version>
+        <commons.lang3.version>3.10</commons.lang3.version>
+        <springfox.swagger2.version>2.9.2</springfox.swagger2.version>
+        <knife4j.springboot.starter.version>2.0.4</knife4j.springboot.starter.version>
+        <hutool.all.version>5.3.10</hutool.all.version>
+        <joda.time.version>2.10.6</joda.time.version>
+        <joda.convert.version>2.2.1</joda.convert.version>
+        <javafaker.version>1.0.2</javafaker.version>
     </properties>
 
     <dependencies>
@@ -33,7 +41,7 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-collections4</artifactId>
-            <version>4.1</version>
+            <version>${commons.collections4.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -54,42 +62,42 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.10</version>
+            <version>${commons.lang3.version}</version>
         </dependency>
         <dependency>
             <groupId>io.springfox</groupId>
             <artifactId>springfox-swagger2</artifactId>
-            <version>2.9.2</version>
+            <version>${springfox.swagger2.version}</version>
         </dependency>
 
         <dependency>
             <groupId>com.github.xiaoymin</groupId>
             <artifactId>knife4j-spring-boot-starter</artifactId>
-            <version>2.0.4</version>
+            <version>${knife4j.springboot.starter.version}</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/cn.hutool/hutool-all -->
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
-            <version>5.3.10</version>
+            <version>${hutool.all.version}</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/joda-time/joda-time -->
         <dependency>
             <groupId>joda-time</groupId>
             <artifactId>joda-time</artifactId>
-            <version>2.10.6</version>
+            <version>${joda.time.version}</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/org.joda/joda-convert -->
         <dependency>
             <groupId>org.joda</groupId>
             <artifactId>joda-convert</artifactId>
-            <version>2.2.1</version>
+            <version>${joda.convert.version}</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/com.github.javafaker/javafaker -->
         <dependency>
             <groupId>com.github.javafaker</groupId>
             <artifactId>javafaker</artifactId>
-            <version>1.0.2</version>
+            <version>${javafaker.version}</version>
         </dependency>
 
     </dependencies>
@@ -98,6 +106,7 @@
         <module>mysql</module>
         <module>redis</module>
         <module>sundry</module>
+        <module>jpa-demo</module>
     </modules>
     <build>
         <pluginManagement><!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) -->
