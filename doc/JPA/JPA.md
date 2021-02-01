@@ -1123,7 +1123,7 @@
       UserInfo(ages=1, name=jack, telephone=123456789)
       ```
 
-    * @Embeddable 与 @EmbeddedId 注解使用
+    * **@Embeddable 与 @EmbeddedId 注解使用**
 
       ```java
       第一步：在我们上面例子中的 UserInfoID 里面添加 @Embeddable 注解。
@@ -1490,7 +1490,7 @@
 
       * orphanRemoval 表示当关联关系被删除的时候，是否应用级联删除，默认 false。
 
-        ```
+        ```java
         public class UserInfo {
            @OneToOne(cascade = {CascadeType.PERSIST},orphanRemoval = true)
            private User user;
@@ -1498,9 +1498,1121 @@
         }
         ```
 
+  * 主键和外键都是同一个字段
+
+    ```java
+    我们假设 user 表是主表，user_info 的主键是 user_id，并且 user_id=user 是表里面的 id
+    public class UserInfo implements Serializable {
+       @Id
+       private Long userId;
+       private Integer ages;
+       private String telephone;
+       @MapsId
+       @OneToOne(cascade = {CascadeType.PERSIST},orphanRemoval = true)
+       private User user;
+    }
+    这里的做法很简单，我们直接把 userId 设置为主键，在 @OneToOne 上面添加 @MapsId 注解即可。@MapsId 注解的作用是把关联关系实体里面的 ID（默认）值 copy 到 @MapsId 标注的字段上面（这里指的是 user_id 字段）。
+    Hibernate: create table user (id bigint not null, address varchar(255), email varchar(255), name varchar(255), sex varchar(255), primary key (id))
+    Hibernate: create table user_info (ages integer, telephone varchar(255), user_id bigint not null, primary key (user_id))
+    Hibernate: alter table user_info add constraint FKn8pl63y4abe7n0ls6topbqjh2 foreign key (user_id) references user
+    ```
+
+  * @OneToOne 延迟加载，我们只需要 ID 值
+
+    * 在 @OneToOne 延迟加载的情况下，我们假设只想查下 user_id，而不想查看 user 表其他的信息，因为当前用不到，可以有以下几种做法。
+
+      ```java
+      第一种做法：还是 User 实体不变，我们改一下 UserInfo 对象，如下所示：
+      package com.example.jpa.example1;
+      import lombok.*;
+      import javax.persistence.*;
+      @Entity
+      @Data
+      @Builder
+      @AllArgsConstructor
+      @NoArgsConstructor
+      @ToString(exclude = "user")
+      public class UserInfo{
+         @Id
+         @GeneratedValue(strategy= GenerationType.AUTO)
+         private Long id;
+         private Integer ages;
+         private String telephone;
+         @MapsId
+         @OneToOne(cascade = {CascadeType.PERSIST},orphanRemoval = true,fetch = FetchType.LAZY)
+         private User user;
+      }
+      从上面这段代码中，可以看到做的更改如下：
+      id 字段我们先用原来的
+      @OneToOne 上面我们添加 @MapsId 注解
+      @OneToOne 里面的 fetch = FetchType.LAZY 设置延迟加载
+      
+      @DataJpaTest
+      @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+      public class UserInfoRepositoryTest {
+          @Autowired
+          private UserInfoRepository userInfoRepository;
+          @BeforeAll
+          @Rollback(false)
+          @Transactional
+          void init() {
+              User user = User.builder().name("jackxx").email("123456@126.com").build();
+              UserInfo userInfo = UserInfo.builder().ages(12).user(user).telephone("12345678").build();
+              userInfoRepository.saveAndFlush(userInfo);
+          }
+          /**
+           * 测试用User关联关系操作
+           *
+           * @throws JsonProcessingException
+           */
+          @Test
+          @Rollback(false)
+          public void testUserRelationships() throws JsonProcessingException {
+              UserInfo userInfo1 = userInfoRepository.getOne(1L);
+              System.out.println(userInfo1);
+              System.out.println(userInfo1.getUser().getId());
+          }
+      }
+      接下来介绍第二种做法，这种做法很简单，只要在 UserInfo 对象里面直接去掉 @OneToOne 关联关系，新增下面的字段即可。
+      @Column(name = "user_id")
+      private Long userId;
+      
+      第三做法是利用 Hibernate，它给我们提供了一种字节码增强技术，通过编译器改变 `class` 解决了延迟加载问题。这种方式有点复杂，需要在编译器引入 hibernateEnhance 的相关 jar 包，以及编译器需要改变 class 文件并添加 lazy 代理来解决延迟加载。我不太推荐这种方式，因为太复杂，你知道有这回事就行了。
+      ```
+
+  * **@JoinCloumns & JoinColumn**
+
+    ```java
+    public @interface JoinColumn {
+        //关键的字段名,默认注解上的字段名，在@OneToOne代表本表的外键字段名字；
+        String name() default "";
+        //与name相反关联对象的字段，默认主键字段
+        String referencedColumnName() default "";
+        //外键字段是否唯一
+        boolean unique() default false;
+        //外键字段是否允许为空
+        boolean nullable() default true;
+        //是否跟随一起新增
+        boolean insertable() default true;
+        //是否跟随一起更新
+        boolean updatable() default true;
+        //JPA2.1新增，外键策略
+        ForeignKey foreignKey() default @ForeignKey(PROVIDER_DEFAULT);
+    }
+    
+    其次，我们看一下 @ForeignKey(PROVIDER_DEFAULT) 里面枚举值有几个。
+    public enum ConstraintMode {
+        //创建外键约束
+       CONSTRAINT,
+        //不创建外键约束
+       NO_CONSTRAINT,
+       //采用默认行为
+       PROVIDER_DEFAULT
+    }
+    然后，我们看看这个注解的语法，就可以解答我们上面的两个问题。修改一下 UserInfo，如下所示：
+    public class UserInfo{
+       @Id
+       @GeneratedValue(strategy= GenerationType.AUTO)
+       private Long id;
+       private Integer ages;
+       private String telephone;
+       @OneToOne(cascade = {CascadeType.PERSIST},orphanRemoval = true,fetch = FetchType.LAZY)
+       @JoinColumn(foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT),name = "my_user_id")
+       private User user;
+       ...其他不变
+    }
+    可以看到，我们在其中指定了字段的名字：my_user_id，并且指定 NO_CONSTRAINT 不生成外键。而测试用例不变，我们看下运行结果。
+    Hibernate: create table user (id bigint not null, address varchar(255), email varchar(255), name varchar(255), sex varchar(255), primary key (id))
+    Hibernate: create table user_info (id bigint not null, ages integer, telephone varchar(255), my_user_id bigint, primary key (id))
         
+    而 @JoinColumns 是 JoinColumns 的复数形式，就是通过两个字段进行的外键关联，这个不常用，我们看一个 demo 了解一下就好。
+    @Entity
+    public class CompanyOffice {
+       @ManyToOne(fetch = FetchType.LAZY)
+       @JoinColumns({
+             @JoinColumn(name="ADDR_ID", referencedColumnName="ID"),
+             @JoinColumn(name="ADDR_ZIP", referencedColumnName="ZIP")
+       })
+       private Address address;
+    }
+    ```
+
+  * **@ManyToOne& @OneToMany**
+
+  * @ManyToOne 代表多对一的关联关系，而 @OneToMany 代表一对多，一般两个成对使用表示双向关联关系。而 JPA 协议中也是明确规定：维护关联关系的是拥有外键的一方，而另一方必须配置 mappedBy.
+
+    ```java
+    public @interface ManyToOne {
+        Class targetEntity() default void.class;
+        CascadeType[] cascade() default {};
+        FetchType fetch() default EAGER;
+        boolean optional() default true;
+    }
+     public @interface OneToMany {
+        Class targetEntity() default void.class;
+     	//cascade 级联操作策略：(CascadeType.PERSIST、CascadeType.REMOVE、	CascadeType.REFRESH、CascadeType.MERGE、CascadeType.ALL)
+    	// 如果不填，默认关系表不会产生任何影响。
+        CascadeType[] cascade() default {};
+    	// 数据获取方式EAGER(立即加载)/LAZY(延迟加载)
+        FetchType fetch() default LAZY;
+        // 关系被谁维护，单项的。注意：只有关系维护方才能操作两者的关系。
+        String mappedBy() default "";
+    	// 是否级联删除。和CascadeType.REMOVE的效果一样。两种配置了一个就会自动级联删除
+        boolean orphanRemoval() default false;
+    }
+    我们看到上面的字段和 @OneToOne 里面的基本一样，用法是一样的，不过需要注意以下几点：
+    @ManyToOne 一定是维护外键关系的一方，所以没有 mappedBy 字段；
+    @ManyToOne 删除的时候一定不能把 One 的一方删除了，所以也没有 orphanRemoval 的选项；
+    @ManyToOne 的 Lazy 效果和 @OneToOne 的一样，所以和上面的用法基本一致；
+    @OneToMany 的 Lazy 是有效果的。
+    ```
+
+  * **@ManyToMany**
+
+    ```java
+    假设 user 表和 room 表是多对多的关系
+    package com.example.jpa.example1;
+    import lombok.*;
+    import javax.persistence.*;
+    import java.io.Serializable;
+    import java.util.List;
+    @Entity
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public class User{
+       @Id
+       @GeneratedValue(strategy= GenerationType.AUTO)
+       private Long id;
+       private String name;
+       @ManyToMany(mappedBy = "users")
+       private List<Room> rooms;
+    }
+    接着，我们让 Room 维护关联关系。
+    package com.example.jpa.example1;
+    import lombok.*;
+    import javax.persistence.*;
+    import java.util.List;
+    @Entity
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @ToString(exclude = "users")
+    public class Room {
+       @Id
+       @GeneratedValue(strategy = GenerationType.AUTO)
+       private Long id;
+       private String title;
+       @ManyToMany
+       private List<User> users;
+    }
+    Hibernate: create table room (id bigint not null, title varchar(255), primary key (id))
+    Hibernate: create table room_users (rooms_id bigint not null, users_id bigint not null)
+    Hibernate: create table user (id bigint not null, email varchar(255), name varchar(255), sex varchar(255), primary key (id))
+    Hibernate: alter table room_users add constraint FKld9phr4qt71ve3gnen43qxxb8 foreign key (users_id) references user
+    Hibernate: alter table room_users add constraint FKtjvf84yquud59juxileusukvk foreign key (rooms_id) references room
+    从结果上我们看到 JPA 帮我们创建的三张表中，room_users 表维护了 user 和 room 的多对多关联关系。其实这个情况还告诉我们一个道理：当用到 @ManyToMany 的时候一定是三张表，不要想着建两张表，两张表肯定是违背表的设计原则的。
+    @ManyToMany 的语法。
+    public @interface ManyToMany {
+        Class targetEntity() default void.class;
+        CascadeType[] cascade() default {};
+        FetchType fetch() default LAZY;
+        String mappedBy() default "";
+    }
+    ```
+
+  * **@JoinTable。**
+
+    ```java
+    @Entity
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @ToString(exclude = "users")
+    public class Room {
+       @Id
+       @GeneratedValue(strategy = GenerationType.AUTO)
+       private Long id;
+       private String title;
+       @ManyToMany
+       @JoinTable(name = "user_room_ref",
+             joinColumns = @JoinColumn(name = "room_id_x"),
+             inverseJoinColumns = @JoinColumn(name = "user_id_x")
+       )
+       private List<User> users;
+    }
+    Hibernate: create table room (id bigint not null, title varchar(255), primary key (id))
+    Hibernate: create table user (id bigint not null, email varchar(255), name varchar(255), sex varchar(255), primary key (id))
+    Hibernate: create table user_room_ref (room_id_x bigint not null, user_id_x bigint not null)
+    Hibernate: alter table user_room_ref add constraint FKoxolr1eyfiu69o45jdb6xdule foreign key (user_id_x) references user
+    Hibernate: alter table user_room_ref add constraint FK2sl9rtuxo9w130d83e19f3dd9 foreign key (room_id_x) references room
+    
+    到这里可以看到，我们创建了一张中间表，并且添加了两个在预想之内的外键关系。
+    public @interface JoinTable {
+        //中间关联关系表名
+        String name() default "";
+        //表的catalog
+        String catalog() default "";
+        //表的schema
+        String schema() default "";
+        //维护关联关系一方的外键字段的名字
+        JoinColumn[] joinColumns() default {};
+        //另一方的表外键字段
+        JoinColumn[] inverseJoinColumns() default {};
+        //指定维护关联关系一方的外键创建规则
+        ForeignKey foreignKey() default @ForeignKey(PROVIDER_DEFAULT);
+        //指定另一方的外键创建规则
+        ForeignKey inverseForeignKey() default @Forei gnKey(PROVIDER_DEFAULT);
+    }
+    ```
+
+  * 利用 @ManyToOne 和 @OneToMany 表达多对多的关联关系
+
+    ```java
+    我们新建一张表 user_room_relation 来存储双方的关联关系和额外字段，实体如下：
+    package com.example.jpa.example1;
+    import lombok.*;
+    import javax.persistence.*;
+    import java.util.Date;
+    @Entity
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public class UserRoomRelation {
+       @Id
+       @GeneratedValue(strategy = GenerationType.AUTO)
+       private Long id;
+       private Date createTime,udpateTime;
+       @ManyToOne
+       private Room room;
+       @ManyToOne
+       private User user;
+    }
+    而 User 变化如下：
+    public class User implements Serializable {
+       @Id
+       @GeneratedValue(strategy= GenerationType.AUTO)
+       private Long id;
+       @OneToMany(mappedBy = "user")
+       private List<UserRoomRelation> userRoomRelations;
+    ....}
+    
+    Room 变化如下：
+    public class Room {
+       @Id
+       @GeneratedValue(strategy = GenerationType.AUTO)
+       private Long id;
+       @OneToMany(mappedBy = "room")
+       private List<UserRoomRelation> userRoomRelations;
+    ...}
+    
+    Hibernate: create table user_room_relation (id bigint not null, create_time timestamp, udpate_time timestamp, room_id bigint, user_id bigint, primary key (id))
+    Hibernate: create table room (id bigint not null, title varchar(255), primary key (id))
+    Hibernate: create table user (id bigint not null, email varchar(255), name varchar(255), sex varchar(255), primary key (id))
+    Hibernate: alter table user_room_relation add constraint FKaesy2rg60vtaxxv73urprbuwb foreign key (room_id) references room
+    Hibernate: alter table user_room_relation add constraint FK45gha85x63026r8q8hs03uhwm foreign key (user_id) references user
+    ```
+
+  * @ManyToMany 的最佳实践
+
+    * 上面我们介绍的 @OneToMany 的最佳实践同样适用，我为了说明方便，采用的是双向关联，而实际生产一般是在中间表对象里面做单向关联，这样会让实体之间的关联关系简单很多。
+    * 与 @OneToMany 一样的道理，不要用级联删除和 orphanRemoval=true。
+    * FetchType 采用默认方式：fetch = FetchType.LAZY 的方式。
+
+* 核心模块有三个
+
+  * **jackson-core：核心包**，提供基于“流模式”解析的相关 API，它包括 JsonPaser 和 JsonGenerator。Jackson 内部实现正是通过高性能的流模式 API 的 JsonGenerator 和 JsonParser 来生成和解析 json。
+
+  * **jackson-annotations：注解包**，提供标准注解功能，这是我们必须要掌握的基础语法。
+
+  * **jackson-databind：数据绑定包**，提供基于“对象绑定”解析的相关 API（ ObjectMapper ） 和“树模型”解析的相关 API（JsonNode）；基于“对象绑定”解析的 API 和“树模型”解析的 API 依赖基于“流模式”解析的 API。如下图中一些标准的类型转换：
+
+    ![Drawing 1.png](https://s0.lgstatic.com/i/image/M00/59/F4/CgqCHl9y6LCAZOFqAAGiK2TqQR8365.png)
+
+  * ![Lark20201009-105051.png](https://s0.lgstatic.com/i/image/M00/5B/A6/CgqCHl9_0CiAWB2rAAL0pfxIviE487.png)
+
+    ```java
+    package com.example.jpa.example1;
+    import com.fasterxml.jackson.annotation.*;
+    import lombok.*;
+    import javax.persistence.*;
+    import java.time.Instant;
+    import java.util.*;
+    @Entity
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @JsonPropertyOrder({"createDate","email"})
+    public class UserJson {
+       @Id
+       @GeneratedValue(strategy= GenerationType.AUTO)
+       private Long id;
+       @JsonProperty("my_name")
+       private String name;
+       private Instant createDate;
+       @JsonFormat(timezone ="GMT+8", pattern = "yyyy-MM-dd HH:mm")
+       private Date updateDate;
+       private String email;
+       @JsonIgnore
+       private String sex;
+       @JsonCreator
+       public UserJson(@JsonProperty("email") String email) {
+          System.out.println("其他业务逻辑");
+          this.email = email;
+       }
+       @Transient
+       @JsonAnySetter
+       private Map<String,Object> other = new HashMap<>();
+       @JsonAnyGetter
+       public Map<String, Object> getOther() {
+          return other;
+       }
+    }
+    ```
+
+  * @JsonAutoDetect JsonAutoDetect.Visibility 类包含与 Java 中的可见性级别匹配的常量，表示 ANY、DEFAULT、NON_PRIVATE、NONE、PROTECTED_AND_PRIVATE和PUBLIC_ONLY。
+
+  * Jackson 默认不是所有的属性都可以被序列化和反序列化。默认的属性可视化的规则如下：
+
+    * 若该属性修饰符是 public，该属性可序列化和反序列化。
+    * 若属性的修饰符不是 public，但是它的 getter 方法和 setter 方法是 public，该属性可序列化和反序列化。因为 getter 方法用于序列化，而 setter 方法用于反序列化。
+    * 若属性只有 public 的 setter 方法，而无 public 的 getter 方法，该属性只能用于反序列化。
+
+    ```java
+    ObjectMapper mapper = new ObjectMapper();
+    // PropertyAccessor 支持的类型有 ALL,CREATOR,FIELD,GETTER,IS_GETTER,NONE,SETTER
+    // Visibility 支持的类型有ANY,DEFAULT,NON_PRIVATE,NONE,PROTECTED_AND_PUBLIC,PUBLIC_ONLY
+    mapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+    ```
+
+  * 反序列化最重要的方法
+
+    ```java
+    public <T> T readValue(String content, Class<T> valueType)
+    public <T> T readValue(String content, TypeReference<T> valueTypeRef)
+    public <T> T readValue(String content, JavaType valueType)
+    ```
+
+    ```java
+    String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(userJson);
+    //单个对象的写法：
+    UserJson user = objectMapper.readValue(json,UserJson.class);
+    //返回List的返回结果的写法：
+    List<User> personList2 = mapper.readValue(jsonListString, new TypeReference<List<User>>(){});
+    ```
+
+  * Jackson 与 JPA 常见的问题
+
+    * 死循环问题如何解决
+
+      ```java
+      第一种情况：我们在写 ToString 方法，特别是 JPA 的实体的时候，很容易陷入死循环，因为实体之间的关联关系配置是双向的，我们就需要 ToString 的时候把一方排除掉，如下所示：
+      @ToString(exclude="address")
+      
+      
+      第二种情况：在转化JSON的时候，双向关联也会死循环。按照我们上面讲的方法，这是时候我们要想到通过 @JsonIgnoreProperties(value={"address"})或者字段上面配置@JsonIgnore，如下：
+      @JsonIgnore
+      private List<UserAddress> address;
+      
+      此外，通过 @JsonBackReference 和 @JsonManagedReference 注解也可以解决死循环。
+      public class UserAddress {
+         @JsonManagedReference
+         private User user;
+      ....}
+      public class User implements Serializable {
+         @OneToMany(mappedBy = "user",fetch = FetchType.LAZY)
+         @JsonBackReference
+         private List<UserAddress> address;
+      ...}
+      JPA 实体 JSON 序列化的常见报错
+      No serializer found for class org.hibernate.proxy.pojo.bytebuddy.ByteBuddyInterceptor and no properties discovered to create BeanSerializer (to avoid exception, disable SerializationFeature.FAIL_ON_EMPTY_BEANS) (through reference chain: com.example.jpa.example1.User$HibernateProxy$MdjeSaTz["hibernateLazyInitializer"])
+      com.fasterxml.jackson.databind.exc.InvalidDefinitionException: No serializer found for class org.hibernate.proxy.pojo.bytebuddy.ByteBuddyInterceptor and no properties discovered to create BeanSerializer (to avoid exception, disable SerializationFeature.FAIL_ON_EMPTY_BEANS) (through reference chain: com.example.jpa.example1.User$HibernateProxy$MdjeSaTz["hibernateLazyInitializer"])
+      ```
+
+    * 常见报错解决方法
+
+      * **解决方法一：引入 Hibernate5Module**
+
+        ```java
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new Hibernate5Module());
+        String json = objectMapper.writeValueAsString(user);
+        System.out.println(json);
+        这样子就不会报错了。
+        
+        Hibernate5Module 里面还有很多 Feature 配置，例如FORCE_LAZY_LOADING，强制 lazy 里面加载就不会有上面的问题了。但是这个会有性能问题，我不建议使用。
+        
+        还有 USE_TRANSIENT_ANNOTATION，利用 JPA 的 @Transient 注解配置，这个默认是开启的。所以基本上 feature 默认配置都是 ok 的，不需要我们动手，只要知道这回事就行了。
+        ```
+
+      * **解决方法二：关闭 SerializationFeature.FAIL_ON_EMPTY_BEANS 的 feature**
+
+        ```java
+        ObjectMapper objectMapper = new ObjectMapper();
+        //直接关闭SerializationFeature.FAIL_ON_EMPTY_BEANS       		objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS,false);
+        String json = objectMapper.writeValueAsString(user);
+        System.out.println(json)
+        因为是 lazy，所以 empty 的 bean 的时候不报错也可以。
+        ```
+
+      * **解决方法三：对象上面排除“hibernateLazyInitializer”“handler”“fieldHandler”等**
+
+        ```java
+        @JsonIgnoreProperties(value={"address","hibernateLazyInitializer","handler","fieldHandler"})
+        public class User implements Serializable {}
+        ```
+
+      * **ObjectMapper 实战经验推荐配置项**
+
+        ```java
+        ObjectMapper objectMapper = new ObjectMapper();
+        //empty beans不需要报错，没有就是没有了
+        objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS,false);
+        //遇到不可识别字段的时候不要报错，因为前端传进来的字段不可信，可以不要影响正常业务逻辑
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,false);
+        //遇到不可以识别的枚举的时候，为了保证服务的强壮性，建议也不要关心未知的，甚至给个默认的，特别是微服务大家的枚举值随时在变，但是老的服务是不需要跟着一起变的
+        objectMapper.configure(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL,true);
+        objectMapper.configure(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE,true);
+        ```
+
+      * **时间类型的最佳实践，如何返回 ISO 格式的标准时间**
+
+        ```java
+        有的时候我们会发现，默认的 ObjectMapper 里面的 module 提供的时间转化格式可能不能满足我们的要求，可能要进行扩展，如下：
+        @Test
+        @Rollback(false)
+        public void testUserJson() throws JsonProcessingException {
+            UserJson userJson = userJsonRepository.findById(1L).get();
+            userJson.setOther(Maps.newHashMap("address","shanghai"));
+            //自定义 myInstant解析序列化和反序列化DateTimeFormatter.ISO_ZONED_DATE_TIME这种格式
+           SimpleModule myInstant = new SimpleModule("instant", Version.unknownVersion())
+                    .addSerializer(java.time.Instant.class, new JsonSerializer<Instant>() {
+                        @Override
+                        public void serialize(java.time.Instant instant,
+                                              JsonGenerator jsonGenerator,
+                                              SerializerProvider serializerProvider)
+                                throws IOException {
+                            if (instant == null) {
+                                jsonGenerator.writeNull();
+                            } else {
+                                jsonGenerator.writeObject(instant.toString());
+                            }
+                        }
+                    })
+                    .addDeserializer(Instant.class, new JsonDeserializer<Instant>() {
+                        @Override
+                        public Instant deserialize(JsonParser jsonParser, DeserializationContext deserializationContext) throws IOException {
+                            Instant result = null;
+                            String text = jsonParser.getText();
+                            if (!StringUtils.isEmpty(text)) {
+                                result = ZonedDateTime.parse(text, DateTimeFormatter.ISO_ZONED_DATE_TIME).toInstant();
+                            }
+                            return result;
+                        }
+                    });
+            ObjectMapper objectMapper = new ObjectMapper();
+            //注册自定义的module
+            objectMapper.registerModule(myInstant);
+            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(userJsn);
+            System.out.println(json);
+        }
+        ```
 
 ### 2. 进阶用法
+
+* **QueryByExampleExecutor**
+
+  * QueryByExampleExecutor（QBE）是一种用户友好的查询技术，具有简单的接口，它允许动态查询创建，并且不需要编写包含字段名称的查询。
+
+    ![img](https://s0.lgstatic.com/i/image/M00/5D/4B/CgqCHl-EE7WAAfi5AACTjc0iffY586.png)
+
+  * QBE 的基本语法
+
+    ```java
+    public interface QueryByExampleExecutor<T> { 
+         //根据“实体”查询条件，查找一个对象
+        <S extends T> S findOne(Example<S> example);
+        //根据“实体”查询条件，查找一批对象
+        <S extends T> Iterable<S> findAll(Example<S> example); 
+        //根据“实体”查询条件，查找一批对象，可以指定排序参数
+        <S extends T> Iterable<S> findAll(Example<S> example, Sort sort);
+         //根据“实体”查询条件，查找一批对象，可以指定排序和分页参数 
+        <S extends T> Page<S> findAll(Example<S> example, Pageable pageable);
+        //根据“实体”查询条件，查找返回符合条件的对象个数
+        <S extends T> long count(Example<S> example); 
+        //根据“实体”查询条件，判断是否有符合条件的对象
+        <S extends T> boolean exists(Example<S> example); 
+    }
+    ```
+
+    ```java
+    @DataJpaTest
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    public class UserAddressRepositoryTest {
+       @Autowired
+       private UserAddressRepository userAddressRepository;
+       private Date now = new Date();
+       /**
+        * 负责添加数据，假设数据库里面已经有的数据
+        */
+       @BeforeAll
+       @Rollback(false)
+       @Transactional
+       void init() {
+          User user = User.builder()
+                .name("jack")
+                .email("123456@126.com")
+                .sex(SexEnum.BOY)
+                .age(20)
+                .createDate(Instant.now())
+                .updateDate(now)
+                .build();
+          userAddressRepository.saveAll(Lists.newArrayList(UserAddress.builder().user(user).address("shanghai").build(),
+                UserAddress.builder().user(user).address("beijing").build()));
+       }
+       @Test
+       @Rollback(false)
+       public void testQBEFromUserAddress() throws JsonProcessingException {
+          User request = User.builder()
+                .name("jack").age(20).email("12345")
+                .build();
+          UserAddress address = UserAddress.builder().address("shang").user(request).build();
+          ObjectMapper objectMapper = new ObjectMapper();
+    //    System.out.println(objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(address)); //可以打印出来看看参数是什么
+    //创建匹配器，即如何使用查询条件
+          ExampleMatcher exampleMatcher = ExampleMatcher.matching()
+                .withMatcher("user.email", ExampleMatcher.GenericPropertyMatchers.startsWith())
+                .withMatcher("address", ExampleMatcher.GenericPropertyMatchers.startsWith());
+          Page<UserAddress> u = userAddressRepository.findAll(Example.of(address,exampleMatcher), PageRequest.of(0,2));
+        System.out.println(objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(u));
+       }
+    }
+    ```
+
+    ```java
+    Example 语法详解
+    public interface Example<T> {
+       static <T> Example<T> of(T probe) {
+          return new TypedExample<>(probe, ExampleMatcher.matching());
+       }
+       static <T> Example<T> of(T probe, ExampleMatcher matcher) {
+          return new TypedExample<>(probe, matcher);
+       }
+       //实体参数
+       T getProbe();
+       //匹配器
+       ExampleMatcher getMatcher();
+       //回顾一下我们上一课时讲解的类型，这个是返回实体参数的Class Type；
+       @SuppressWarnings("unchecked")
+       default Class<T> getProbeType() {
+          return (Class<T>) ProxyUtils.getUserClass(getProbe().getClass());
+       }
+    }
+    
+    @ToString
+    @EqualsAndHashCode
+    @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
+    @Getter
+    class TypedExample<T> implements Example<T> {
+       private final @NonNull T probe;
+       private final @NonNull ExampleMatcher matcher;
+    }
+    ```
+
+    > 其中我们发现三个类：Probe、ExampleMatcher 和 Example，分别做如下解释：
+    >
+    > - Probe：这是具有填充字段的域对象的实际实体类，即查询条件的封装类（又可以理解为查询条件参数），必填。
+    > - ExampleMatcher：ExampleMatcher 有关如何匹配特定字段的匹配规则，它可以重复使用在多个实例中，必填。
+    > - Example：Example 由 Probe 探针和 ExampleMatcher 组成，它用于创建查询，即组合查询参数和参数的匹配规则。
+    >
+    > 通过 Example 的源码，我们发现想创建 Example 的话，只有两个方法：
+    >
+    > 1. static `<T>` Example`<T>` of(T probe)：需要一个实体参数，即查询的条件。而里面的 ExampleMatcher 采用默认的 ExampleMatcher.matching()； 表示忽略 Null，所有字段采用精准匹配。
+    > 2. static `<T>` Example`<T>` of(T probe, ExampleMatcher matcher)：需要两个参数构建 Example，也就表示了 ExampleMatcher 自由组合规则，正如我们上面的测试用例里面的代码一样。
+
+  * **ExampleMatcher** 
+
+    ```java
+    //默认matching方法
+    static ExampleMatcher matching() {
+       return matchingAll();
+    }
+    //matchingAll，默认的方法
+    static ExampleMatcher matchingAll() {
+       return new TypedExampleMatcher().withMode(MatchMode.ALL);
+    }
+    两个方法所表达的意思是一样的，只不过一个是默认，一个是方法名上面有语义的。两者采用的都是 MatchMode.ALL 的模式，即 AND 模式
+    Hibernate: select useraddres0_.id as id1_2_, useraddres0_.address as address2_2_, useraddres0_.user_id as user_id3_2_ from user_address useraddres0_ inner join user user1_ on useraddres0_.user_id=user1_.id where user1_.age=20 and user1_.name=? and (user1_.email like ? escape ?) and (useraddres0_.address like ? escape ?) limit ?
+    ，这些查询条件之间都是 AND 的关系
+    
+    static ExampleMatcher matchingAny() {
+       return new TypedExampleMatcher().withMode(MatchMode.ANY);
+    }
+    第三个方法和前面两个方法的区别在于：第三个 MatchMode.ANY，表示查询条件是 or 的关系，我们看一下 SQL
+    Hibernate: select count(useraddres0_.id) as col_0_0_ from user_address useraddres0_ inner join user user1_ on useraddres0_.user_id=user1_.id where useraddres0_.address like ? escape ? or user1_.age=20 or user1_.email like ? escape ? or user1_.name=?
+    ```
+
+  * ExampleMatcher 语法暴露的方法
+
+    * **忽略大小写**
+
+      ```java
+      //默认忽略大小写的方式，默认 False。
+      ExampleMatcher withIgnoreCase(boolean defaultIgnoreCase);
+      //提供了一个默认的实现方法，忽略大小写；
+      default ExampleMatcher withIgnoreCase() {
+         return withIgnoreCase(true);
+      }
+      //哪些属性的paths忽略大小写，可以指定多个参数；
+      ExampleMatcher withIgnoreCase(String... propertyPaths);
+      ```
+
+    * **暴露的 Null 值处理方式如下：**
+
+      ```java
+      ExampleMatcher withNullHandler(NullHandler nullHandler);
+      参数 NullHandler枚举值即可，有两个可选值：INCLUDE（包括）、IGNORE（忽略），其中要注意：
+      标识作为条件的实体对象中，一个属性值（条件值）为 Null 时，是否参与过滤；
+      当该选项值是 INCLUDE 时，表示仍参与过滤，会匹配数据库表中该字段值是 Null 的记录；
+      若为 IGNORE 值，表示不参与过滤。
+      
+      //提供一个默认实现方法，忽略 NULL 属性；
+      default ExampleMatcher withIgnoreNullValues() {
+         return withNullHandler(NullHandler.IGNORE);
+      }
+      //把 NULL 属性值作为查询条件
+      default ExampleMatcher withIncludeNullValues() {
+         return withNullHandler(NullHandler.INCLUDE);
+      }
+      ```
+
+    * **忽略某些 Paths，不参加查询条件**
+
+      ```java
+      //忽略某些属性列表，不参与查询过滤条件。
+      ExampleMatcher withIgnorePaths(String... ignoredPaths);
+      ```
+
+    * ##### 字符串字段默认的匹配规则
+
+      ```java
+      ExampleMatcher withStringMatcher(StringMatcher defaultStringMatcher);
+      关于默认字符串的匹配方式，枚举类型有 6 个可选值，
+          DEFAULT（默认，效果同 EXACT）、
+          EXACT（相等）、STARTING（开始匹配）、
+          ENDING（结束匹配）、
+          CONTAINING（包含，模糊匹配）、
+          REGEX（正则表达式）。
+      ExampleMatcher withMatcher(String propertyPath, GenericPropertyMatcher genericPropertyMatcher);
+      
+      ```
+
+      ![Drawing 4.png](https://s0.lgstatic.com/i/image/M00/5D/41/Ciqc1F-EFHuAXsn3AABiCE6_I0I978.png)
+
+    * 示例
+
+      ```java
+    //创建匹配器，即如何使用查询条件
+      ExampleMatcher exampleMatcher = ExampleMatcher
+            //采用默认and的查询方式
+            .matchingAll()
+            //忽略大小写
+            .withIgnoreCase()
+            //忽略所有null值的字段
+            .withIgnoreNullValues()
+            .withIgnorePaths("id","createDate")
+            //默认采用精准匹配规则
+            .withStringMatcher(ExampleMatcher.StringMatcher.EXACT)
+            //级联查询，字段user.email采用字符前缀匹配规则
+            .withMatcher("user.email", ExampleMatcher.GenericPropertyMatchers.startsWith())
+            //特殊指定address字段采用后缀匹配
+            .withMatcher("address", ExampleMatcher.GenericPropertyMatchers.endsWith());
+      Page<UserAddress> u = userAddressRepository.findAll(Example.of(address,exampleMatcher), PageRequest.of(0,2));
+      ```
+    
+    * ExampleExceutor 使用中需要考虑的因素
+    
+      * Null 值的处理：当某个条件值为 Null 时，是应当忽略这个过滤条件，还是应当去匹配数据库表中该字段值是 Null 的记录呢？
+      * 忽略某些属性值：一个实体对象，有许多个属性，是否每个属性都参与过滤？是否可以忽略某些属性？
+      * 不同的过滤方式：同样是作为 String 值，可能“姓名”希望精确匹配，“地址”希望模糊匹配，如何做到？
+  
+* JpaSpecificationExecutor 使用案例
+
+  ```java
+      @Test
+      public void testSPE() {
+          //模拟请求参数
+          User userQuery = User.builder()
+                  .name("jack")
+                  .email("123456@126.com")
+                  .sex(SexEnum.BOY)
+                  .age(20)
+                  .addresses(Lists.newArrayList(UserAddress.builder().address("shanghai").build()))
+                  .build();
+                  //假设的时间范围参数
+          Instant beginCreateDate = Instant.now().plus(-2, ChronoUnit.HOURS);
+          Instant endCreateDate = Instant.now().plus(1, ChronoUnit.HOURS);
+          //利用Specification进行查询
+          Page<User> users = userRepository.findAll(new Specification<User>() {
+              @Override
+              public Predicate toPredicate(Root<User> root, CriteriaQuery<?> query, CriteriaBuilder cb) {
+                  List<Predicate> ps = new ArrayList<Predicate>();
+                  if (StringUtils.isNotBlank(userQuery.getName())) {
+                      //我们模仿一下like查询，根据name模糊查询
+                      ps.add(cb.like(root.get("name"),"%" +userQuery.getName()+"%"));
+                  }
+                  if (userQuery.getSex()!=null){
+                      //equal查询条件，这里需要注意，直接传递的是枚举
+                      ps.add(cb.equal(root.get("sex"),userQuery.getSex()));
+                  }
+                  if (userQuery.getAge()!=null){
+                      //greaterThan大于等于查询条件
+                      ps.add(cb.greaterThan(root.get("age"),userQuery.getAge()));
+                  }
+                  if (beginCreateDate!=null&&endCreateDate!=null){
+                      //根据时间区间去查询创建
+                      ps.add(cb.between(root.get("createDate"),beginCreateDate,endCreateDate));
+                  }
+                  if (!ObjectUtils.isEmpty(userQuery.getAddresses())) {
+                      //联表查询，利用root的join方法，根据关联关系表里面的字段进行查询。
+                      ps.add(cb.in(root.join("addresses").get("address")).value(userQuery.getAddresses().stream().map(a->a.getAddress()).collect(Collectors.toList())));
+                  }
+                  return query.where(ps.toArray(new Predicate[ps.size()])).getRestriction();
+              }
+          }, PageRequest.of(0, 2));
+          System.out.println(users);
+      }
+  ```
+
+  ```java
+  public interface JpaSpecificationExecutor<T> {
+     //根据 Specification 条件查询单个对象，要注意的是，如果条件能查出来多个会报错
+     T findOne(@Nullable Specification<T> spec);
+     //根据 Specification 条件，查询 List 结果
+     List<T> findAll(@Nullable Specification<T> spec);
+     //根据 Specification 条件，分页查询
+     Page<T> findAll(@Nullable Specification<T> spec, Pageable pageable);
+     //根据 Specification 条件，带排序的查询结果
+     List<T> findAll(@Nullable Specification<T> spec, Sort sort);
+     //根据 Specification 条件，查询数量
+     long count(@Nullable Specification<T> spec);
+  }
+  ```
+
+  * Root`<User>` root
+
+    * 代表了可以查询和操作的实体对象的根，如果将实体对象比喻成表名，那 root 里面就是这张表里面的字段，而这些字段只是 JPQL 的实体字段而已。我们可以通过里面的 Path get（String attributeName），来获得我们想要操作的字段。
+    
+  * CriteriaQuery<?> query
+  
+    * 代表一个 specific 的顶层查询对象，它包含着查询的各个部分，比如 select 、from、where、group by、order by 等。CriteriaQuery 对象只对实体类型或嵌入式类型的 Criteria 查询起作用。简单理解为，它提供了查询 ROOT 的方法。
+  
+  * CriteriaBuilder cb
+  
+    * CriteriaBuilder 是用来构建 CritiaQuery 的构建器对象，其实就相当于条件或者条件组合，并以 Predicate 的形式返回。
+  
+    ```java
+    package com.example.jpa.example1.spe;
+    import org.springframework.data.jpa.domain.Specification;
+    import javax.persistence.criteria.*;
+    public class MySpecification<Entity> implements Specification<Entity> {
+       private SearchCriteria criteria;
+       public MySpecification (SearchCriteria criteria) {
+          this.criteria = criteria;
+       }
+       /**
+        * 实现实体根据不同的字段、不同的Operator组合成不同的Predicate条件
+        *
+        * @param root            must not be {@literal null}.
+        * @param query           must not be {@literal null}.
+        * @param builder  must not be {@literal null}.
+        * @return a {@link Predicate}, may be {@literal null}.
+        */
+       @Override
+       public Predicate toPredicate(Root<Entity> root, CriteriaQuery<?> query, CriteriaBuilder builder) {
+          if (criteria.getOperation().compareTo(Operator.GT)==0) {
+             return builder.greaterThanOrEqualTo(
+                   root.<String> get(criteria.getKey()), criteria.getValue().toString());
+          }
+          else if (criteria.getOperation().compareTo(Operator.LT)==0) {
+             return builder.lessThanOrEqualTo(
+                   root.<String> get(criteria.getKey()), criteria.getValue().toString());
+          }
+          else if (criteria.getOperation().compareTo(Operator.LK)==0) {
+             if (root.get(criteria.getKey()).getJavaType() == String.class) {
+                return builder.like(
+                      root.<String>get(criteria.getKey()), "%" + criteria.getValue() + "%");
+             } else {
+                return builder.equal(root.get(criteria.getKey()), criteria.getValue());
+             }
+          }
+          return null;
+       }
+    }
+    
+    package com.example.jpa.example1.spe;
+    import lombok.*;
+    /**
+     * @author jack，实现不同的查询条件，不同的操作，针对Value;
+     */
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public class SearchCriteria {
+       private String key;
+       private Operator operation;
+       private Object value;
+    }
+    
+    package com.example.jpa.example1.spe;
+    public enum Operator {
+       /**
+        * 等于
+        */
+       EQ("="),
+       /**
+        * 等于
+        */
+       LK(":"),
+       /**
+        * 不等于
+        */
+       NE("!="),
+       /**
+        * 大于
+        */
+       GT(">"),
+       /**
+        * 小于
+        */
+       LT("<"),
+       /**
+        * 大于等于
+        */
+       GE(">=");
+       Operator(String operator) {
+          this.operator = operator;
+       }
+       private String operator;
+    }
+    
+    /**
+     * 测试自定义的Specification语法
+     */
+    @Test
+    public void givenLast_whenGettingListOfUsers_thenCorrect() {
+        MySpecification<User> name =
+            new MySpecification<User>(new SearchCriteria("name", Operator.LK, "jack"));
+    MySpecification<User> age =
+            new MySpecification<User>(new SearchCriteria("age", Operator.GT, 2));
+    List<User> results = userRepository.findAll(Specification.where(name).and(age));
+        System.out.println(results.get(0).getName());
+    }
+    
+    先创建一个 Controller，用来接收 search 这样的查询条件：类似 userssearch=lastName:doe,age>25 的参数。
+    @RestController
+    public class UserController {
+        @Autowired
+        private UserRepository repo;
+        @RequestMapping(method = RequestMethod.GET, value = "/users")
+        @ResponseBody
+        public List<User> search(@RequestParam(value = "search") String search) {
+            Specification<User> spec = new SpecificationsBuilder<User>().buildSpecification(search);
+            return repo.findAll(spec);
+        }
+    }
+    
+    Controller 里面非常简单，利用 SpecificationsBuilder 生成我们需要的 Specification 即可。
+    package com.example.jpa.example1.spe;
+    import com.example.jpa.example1.User;
+    import org.springframework.data.jpa.domain.Specification;
+    import java.util.ArrayList;
+    import java.util.List;
+    import java.util.regex.Matcher;
+    import java.util.regex.Pattern;
+    import java.util.stream.Collectors;
+    /**
+     * 处理请求参数
+     * @param <Entity>
+     */
+    public class SpecificationsBuilder<Entity> {
+       private final List<SearchCriteria> params;
+    
+       //初始化params，保证每次实例都是一个新的ArrayList
+       public SpecificationsBuilder() {
+          params = new ArrayList<SearchCriteria>();
+       }
+    
+       //利用正则表达式取我们search参数里面的值，解析成SearchCriteria对象
+       public Specification<Entity> buildSpecification(String search) {
+          Pattern pattern = Pattern.compile("(\\w+?)(:|<|>)(\\w+?),");
+          Matcher matcher = pattern.matcher(search + ",");
+          while (matcher.find()) {
+             this.with(matcher.group(1), Operator.fromOperator(matcher.group(2)), matcher.group(3));
+          }
+          return this.build();
+       }
+       //根据参数返回我们刚才创建的SearchCriteria
+       private SpecificationsBuilder with(String key, Operator operation, Object value) {
+          params.add(new SearchCriteria(key, operation, value));
+          return this;
+       }
+       //根据我们刚才创建的MySpecification返回所需要的Specification
+       private Specification<Entity> build() {
+          if (params.size() == 0) {
+             return null;
+          }
+          List<Specification> specs = params.stream()
+                .map(MySpecification<User>::new)
+                .collect(Collectors.toList());
+          Specification result = specs.get(0);
+          for (int i = 1; i < params.size(); i++) {
+             result = Specification.where(result)
+                   .and(specs.get(i));
+          }
+          return result;
+       }
+    }
+    ```
+  
+* EntityManager 
+
+  * **获得 EntityManager 的方式：通过 @PersistenceContext 注解。**
+
+    * 将 @PersistenceContext 注解标注在 EntityManager 类型的字段上，这样得到的 EntityManager 就是容器管理的 EntityManager。由于是容器管理的，所以我们不需要、也不应该显式关闭注入的 EntityManager 实例。
+
+      ```java
+      @DataJpaTest
+      @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+      public class UserRepositoryTest {
+          //利用该方式获得entityManager
+          @PersistenceContext
+          private EntityManager entityManager;
+          @Autowired
+          private UserRepository userRepository;
+          /**
+           * 测试entityManager用法
+           *
+           * @throws JsonProcessingException
+           */
+          @Test
+          @Rollback(false)
+          public void testEntityManager() throws JsonProcessingException {
+              //测试找到一个User对象
+              User user = entityManager.find(User.class,2L);
+              Assertions.assertEquals(user.getAddresses(),"shanghai");
+      
+              //我们改变一下user的删除状态
+              user.setDeleted(true);
+              //merger方法
+              entityManager.merge(user);
+              //更新到数据库里面
+              entityManager.flush();
+      
+              //再通过createQuery创建一个JPQL，进行查询
+              List<User> users =  entityManager.createQuery("select u From User u where u.name=?1")
+                      .setParameter(1,"jack")
+                      .getResultList();
+              Assertions.assertTrue(users.get(0).getDeleted());
+          }
+      }
+      ```
+
+* @EnableJpaRepositories
+
+  ```java
+  public @interface EnableJpaRepositories {
+     // value 等于 basePackage 用于配置扫描 Repositories 所在的 package 及子 package。
+     // @EnableJpaRepositories(basePackages = "com.example")
+     // 默认 @SpringBootApplication 注解出现目录及其子目录。
+     String[] value() default {};
+     
+     // basePackageClasses 指定 Repository 类所在包，可以替换 basePackage 的使用。
+     // 一样可以单个字符，下面例子表示 BookRepository.class 所在 Package 下面的所有 Repositories 都会被扫描注册。
+     // @EnableJpaRepositories(basePackageClasses = BookRepository.class)
+     String[] basePackages() default {};
+     Class<?>[] basePackageClasses() default {};
+     // includeFilters
+     // 指定包含的过滤器，该过滤器采用 ComponentScan 的过滤器，可以指定过滤器类型。
+     // @EnableJpaRepositories( includeFilters={@ComponentScan.Filter(type=FilterType.ANNOTATION, value=Repository.class)})
+     Filter[] includeFilters() default {};
+     // 指定不包含过滤器，该过滤器也是采用 ComponentScan 的过滤器里面的类。
+     // @EnableJpaRepositories(excludeFilters={@ComponentScan.Filter(type=FilterType.ANNOTATION, value=Service.class),@ComponentScan.Filter(type=FilterType.ANNOTATION, value=Controller.class)})
+     Filter[] excludeFilters() default {};
+     // repositoryImplementationPostfix 当我们自定义 Repository 的时候，约定的接口 Repository 的实现类的后缀是什么
+     String repositoryImplementationPostfix() default "Impl";
+     // namedQueriesLocation named SQL 存放的位置，默认为 META-INF/jpa-named-queries.properties
+     // Todo.findBySearchTermNamedFile=SELECT t FROM Table t WHERE LOWER(t.description) LIKE LOWER(CONCAT('%', :searchTerm, '%')) ORDER BY t.title ASC
+     String namedQueriesLocation() default "";
+     // queryLookupStrategy 构建条件查询的查找策略，包含三种方式：CREATE、USE_DECLARED_QUERY、CREATE_IF_NOT_FOUND。
+     // CREATE：按照接口名称自动构建查询方法，即我们前面说的 Defining Query Methods；
+     // USE_DECLARED_QUERY：用 @Query 这种方式查询；
+     // CREATE_IF_NOT_FOUND：如果有 @Query 注解，先以这个为准；如果不起作用，再用 Defining Query Methods；这个是默认的，基本不需要修改.
+     Key queryLookupStrategy() default Key.CREATE_IF_NOT_FOUND;
+     // 指定生产 Repository 的工厂类，默认 JpaRepositoryFactoryBean。JpaRepositoryFactoryBean 的主要作用是以动态代理的方式，帮我们所有 Repository 的接口生成实现类。例如当我们通过断点，看到 UserRepository 的实现类是 SimpleJpaRepository 代理对象的时候，就是这个工厂类干的，一般我们很少会去改变这个生成代理的机制。
+     Class<?> repositoryFactoryBeanClass() default JpaRepositoryFactoryBean.class;
+     // 用来指定我们自定义的 Repository 的实现类是什么。默认是 DefaultRepositoryBaseClass，即表示没有指定的 Repository 的实现基类。
+     Class<?> repositoryBaseClass() default DefaultRepositoryBaseClass.class;
+     // 用来指定创建和生产 EntityManager 的工厂类是哪个，默认是 name=“entityManagerFactory” 的 Bean。一般用于多数据配置。
+     String entityManagerFactoryRef() default "entityManagerFactory";
+     // 用来指定默认的事务处理是哪个类，默认是 transactionManager，一般用于多数据源。
+     String transactionManagerRef() default "transactionManager";
+     boolean considerNestedRepositories() default false;
+     boolean enableDefaultTransactions() default true;
+  }
+  ```
+
+* 通过 @EnableJpaRepositories 定义默认的 Repository 的实现类
+
+  ```
+  第一步：正如上面我们讲的利用 @EnableJpaRepositories 指定 repositoryBaseClass，代码如下：
+  @SpringBootApplication
+  @EnableWebMvc
+  @EnableJpaRepositories(repositoryImplementationPostfix = "Impl",repositoryBaseClass = CustomerBaseRepository.class)
+  public class JpaApplication {
+     public static void main(String[] args) {
+        SpringApplication.run(JpaApplication.class, args);
+     }
+  }
+  第二步：创建 CustomerBaseRepository 继承 SimpleJpaRepository 即可。
+  package com.example.jpa.example1.customized;
+  import org.springframework.data.jpa.repository.support.JpaEntityInformation;
+  import org.springframework.data.jpa.repository.support.SimpleJpaRepository;
+  import org.springframework.transaction.annotation.Transactional;
+  import javax.persistence.EntityManager;
+  @Transactional(readOnly = true)
+  public class CustomerBaseRepository<T extends BaseEntity,ID> extends SimpleJpaRepository<T,ID>  {
+      private final JpaEntityInformation<T, ?> entityInformation;
+      private final EntityManager em;
+      public CustomerBaseRepository(JpaEntityInformation<T, ?> entityInformation, EntityManager entityManager) {
+          super(entityInformation, entityManager);
+          this.entityInformation = entityInformation;
+          this.em = entityManager;
+      }
+      public CustomerBaseRepository(Class<T> domainClass, EntityManager em) {
+          super(domainClass, em);
+          entityInformation = null;
+          this.em = em;
+      }
+      //覆盖删除方法，实现逻辑删除，换成更新方法
+      @Transactional
+      @Override
+      public void delete(T entity) {
+          entity.setDeleted(Boolean.TRUE);
+          em.merge(entity);
+      }
+  }
+  
+  ```
+
+  
+
 
 ### 3. 原理
 
