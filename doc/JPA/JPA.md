@@ -2570,7 +2570,7 @@
 
 * 通过 @EnableJpaRepositories 定义默认的 Repository 的实现类
 
-  ```
+  ```java
   第一步：正如上面我们讲的利用 @EnableJpaRepositories 指定 repositoryBaseClass，代码如下：
   @SpringBootApplication
   @EnableWebMvc
@@ -2609,14 +2609,2546 @@
       }
   }
   
+  第三步：写一个测试用例测试一下。
+@Test
+  public void testCustomizedBaseRepository() {
+      User user = userRepository.findById(2L).get();
+      userRepository.logicallyDelete(user);
+      userRepository.delete(user);
+      List<User> users = userRepository.findAll();
+      Assertions.assertEquals(users.get(0).getDeleted(),Boolean.TRUE);
+  }
+  ```
+  
+* 实际应用场景
+
+  * 首先肯定是我们做框架的时候、解决一些通用问题的时候，如逻辑删除，正如我们上面的实例所示的样子。
+  *  在实际生产中经常会有这样的场景：对外暴露的是 UUID 查询方法，而对内暴露的是 Long 类型的 ID，这时候我们就可以自定义一个 FindByIdOrUUID 的底层实现方法，可以选择在自定义的 Respository 接口里面实现。
+  * Defining Query Methods 和 @Query 满足不了我们的查询，但是我们又想用它的方法语义的时候，就可以考虑实现不同的 Respository 的实现类，来满足我们不同业务场景的复杂查询。
+
+  ```java
+  @SQLDelete(sql = "UPDATE user SET deleted = true where deleted =false and id = ?")
+  public class User implements Serializable {
+  ....
+  }
   ```
 
-  
+* **JAP审计功能**
 
+  * Auditing 是帮我们做审计用的，当我们操作一条记录的时候，需要知道这是谁创建的、什么时间创建的、最后修改人是谁、最后修改时间是什么时候，甚至需要修改记录……这些都是 Spring Data JPA 里面的 Auditing 支持的，它为我们提供了四个注解来完成上面说的一系列事情，如下：
+
+    *  @CreatedBy 是哪个用户创建的。
+
+    *  @CreatedDate 创建的时间。
+
+    *  @LastModifiedBy 最后修改实体的用户。
+
+    * @LastModifiedDate 最后一次修改的时间。
+
+  * 具体实现步骤
+
+    ```java
+    第一种方式：直接在实例里面添加上述四个注解
+    第一步：在 @Entity：User 里面添加四个注解，并且新增 @EntityListeners(AuditingEntityListener.class) 注解。
+@Entity
+    @Data
+@Builder
+    @AllArgsConstructor
+@NoArgsConstructor
+    @ToString(exclude = "addresses")
+@EntityListeners(AuditingEntityListener.class)
+    public class User implements Serializable {
+       @Id
+       @GeneratedValue(strategy= GenerationType.AUTO)
+       private Long id;
+       private String name;
+       private String email;
+       @Enumerated(EnumType.STRING)
+       private SexEnum sex;
+       private Integer age;
+       @OneToMany(mappedBy = "user")
+       @JsonIgnore
+       private List<UserAddress> addresses;
+       private Boolean deleted;
+       @CreatedBy
+       private Integer createUserId;
+       @CreatedDate
+       private Date createTime;
+       @LastModifiedBy
+       private Integer lastModifiedUserId;
+       @LastModifiedDate
+       private Date lastModifiedTime;
+    }
+    
+    第二步：实现 AuditorAware 接口，告诉 JPA 当前的用户是谁。
+    我们需要实现 AuditorAware 接口，以及 getCurrentAuditor 方法，并返回一个 Integer 的 user ID。
+    public class MyAuditorAware implements AuditorAware<Integer> {
+       //需要实现AuditorAware接口，返回当前的用户ID
+       @Override
+       public Optional<Integer> getCurrentAuditor() {
+          ServletRequestAttributes servletRequestAttributes =
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+          Integer userId = (Integer) servletRequestAttributes.getRequest().getSession().getAttribute("userId");
+          return Optional.ofNullable(userId);
+       }
+    }
+    这里关键的一步，是实现 AuditorAware 接口的方法，如下所示：
+    public interface AuditorAware<T> {
+       T getCurrentAuditor();
+    }
+    需要注意的是：这里获得用户 ID 的方法不止这一种，实际工作中，我们可能将当前的 user 信息放在 Session 中，可能把当前信息放在 Redis 中，也可能放在 Spring 的 security 里面管理。此外，这里的实现会有略微差异，我们以 security 为例：
+    Authentication authentication =  SecurityContextHolder.getContext().getAuthentication();
+    if (authentication == null || !authentication.isAuthenticated()) {
+      return null;
+    }
+    Integer userId = ((LoginUserInfo) authentication.getPrincipal()).getUser().getId();
+    
+    第三步：通过 @EnableJpaAuditing 注解开启 JPA 的 Auditing 功能。
+    第三步是最重要的一步，如果想使上面的配置生效，我们需要开启 JPA 的 Auditing 功能（默认没开启）。这里需要用到的注解是 @EnableJpaAuditing，代码如下：
+    @Inherited
+    @Documented
+    @Target(ElementType.TYPE)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Import(JpaAuditingRegistrar.class)
+    public @interface EnableJpaAuditing {
+    //auditor用户的获取方法，默认是找AuditorAware的实现类；
+    String auditorAwareRef() default "";
+    //是否在创建修改的时候设置时间，默认是true
+    boolean setDates() default true;
+    //在创建的时候是否同时作为修改，默认是true
+    boolean modifyOnCreate() default true;
+    //时间的生成方法，默认是取当前时间(为什么提供这个功能呢？因为测试的时候有可能希望时间保持不变，它提供了一种自定义的方法)；
+    String dateTimeProviderRef() default "";
+    }
+    
+    在了解了@EnableJpaAuditing注解之后，我们需要创建一个Configuration 文件，添加 @EnableJpaAuditing 注解，并且把我们的 MyAuditorAware 加载进去即可，如下所示：
+        @Configuration
+    @EnableJpaAuditing
+    public class JpaConfiguration {
+       @Bean
+       @ConditionalOnMissingBean(name = "myAuditorAware")
+       MyAuditorAware myAuditorAware() {
+          return new MyAuditorAware();
+       }
+    }
+    
+    第四步：我们写个测试用例测试一下。
+    @DataJpaTest
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @Import(JpaConfiguration.class)
+    public class UserRepositoryTest {
+        @Autowired
+        private UserRepository userRepository;
+        @MockBean
+        MyAuditorAware myAuditorAware;
+        @Test
+        public void testAuditing() {
+            //由于测试用例模拟web context环境不是我们的重点，我们这里利用@MockBean，mock掉我们的方法，期待返回13这个用户ID
+            Mockito.when(myAuditorAware.getCurrentAuditor()).thenReturn(Optional.of(13));
+            //我们没有显式的指定更新时间、创建时间、更新人、创建人
+            User user = User.builder()
+                    .name("jack")
+                    .email("123456@126.com")
+                    .sex(SexEnum.BOY)
+                    .age(20)
+                    .build();
+            userRepository.save(user);
+            //验证是否有创建时间、更新时间，UserID是否正确；
+            List<User> users = userRepository.findAll();
+            Assertions.assertEquals(13,users.get(0).getCreateUserId());
+            Assertions.assertNotNull(users.get(0).getLastModifiedTime());
+            System.out.println(users.get(0));
+        }
+    }
+    
+    ```
+    
+    ```java
+    第二种方式：实体里面实现Auditable 接口
+    @Entity
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @ToString(exclude = "addresses")
+    @EntityListeners(AuditingEntityListener.class)
+    public class User implements Auditable<Integer,Long, Instant> {
+       @Id
+       @GeneratedValue(strategy= GenerationType.AUTO)
+       private Long id;
+       private String name;
+       private String email;
+       @Enumerated(EnumType.STRING)
+       private SexEnum sex;
+       private Integer age;
+       @OneToMany(mappedBy = "user")
+       @JsonIgnore
+       private List<UserAddress> addresses;
+       private Boolean deleted;
+       private Integer createUserId;
+       private Instant createTime;
+       private Integer lastModifiedUserId;
+       private Instant lastModifiedTime;
+       @Override
+       public Optional<Integer> getCreatedBy() {
+          return Optional.ofNullable(this.createUserId);
+       }
+       @Override
+       public void setCreatedBy(Integer createdBy) {
+          this.createUserId = createdBy;
+       }
+       @Override
+       public Optional<Instant> getCreatedDate() {
+          return Optional.ofNullable(this.createTime);
+       }
+       @Override
+       public void setCreatedDate(Instant creationDate) {
+          this.createTime = creationDate;
+       }
+       @Override
+       public Optional<Integer> getLastModifiedBy() {
+          return Optional.ofNullable(this.lastModifiedUserId);
+       }
+       @Override
+       public void setLastModifiedBy(Integer lastModifiedBy) {
+          this.lastModifiedUserId = lastModifiedBy;
+       }
+       @Override
+       public void setLastModifiedDate(Instant lastModifiedDate) {
+          this.lastModifiedTime = lastModifiedDate;
+       }
+       @Override
+       public Optional<Instant> getLastModifiedDate() {
+          return Optional.ofNullable(this.lastModifiedTime);
+       }
+       @Override
+       public boolean isNew() {
+          return id==null;
+       }
+    }
+    ```
+    
+    ```java
+    第三种方式：利用 @MappedSuperclass 注解
+    第一步：创建一个 BaseEntity，里面放一些实体的公共字段和注解。
+    package com.example.jpa.example1.base;
+    import org.springframework.data.annotation.*;
+    import javax.persistence.MappedSuperclass;
+    import java.time.Instant;
+    @Data
+    @MappedSuperclass
+    @EntityListeners(AuditingEntityListener.class)
+    public class BaseEntity {
+       @CreatedBy
+       private Integer createUserId;
+       @CreatedDate
+       private Instant createTime;
+       @LastModifiedBy
+       private Integer lastModifiedUserId;
+       @LastModifiedDate
+       private Instant lastModifiedTime;
+    }
+    注意： BaseEntity里面需要用上面提到的四个注解，并且加上@EntityListeners(AuditingEntityListener.class)，这样所有的子类就不需要加了。
+    
+    第二步：实体直接继承 BaseEntity 即可
+    @Entity
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @ToString(exclude = "addresses")
+    public class User extends BaseEntity {
+       @Id
+       @GeneratedValue(strategy= GenerationType.AUTO)
+       private Long id;
+       private String name;
+       private String email;
+       @Enumerated(EnumType.STRING)
+       private SexEnum sex;
+       private Integer age;
+       @OneToMany(mappedBy = "user")
+       @JsonIgnore
+       private List<UserAddress> addresses;
+       private Boolean deleted;
+    }
+    ```
+  
+* Java Persistence API 里面规定的回调方法有哪些？
+
+  * @PrePersist
+
+  * @PostPersist
+
+  * @PreRemove
+
+  * @PostRemove
+
+  * @PreUpdate
+
+  * @PostUpdate
+
+  * @PostLoad
+
+    ![image (5).png](https://s0.lgstatic.com/i/image/M00/62/8F/Ciqc1F-SoLyAODuaAADhS0Urg_0032.png)
+
+  * **语法注意事项**
+
+    * 回调函数都是和 EntityManager.flush 或 EntityManager.commit 在同一个线程里面执行的，只不过调用方法有先后之分，都是同步调用，所以当任何一个回调方法里面发生异常，都会触发事务进行回滚，而不会触发事务提交。
+    * Callbacks 注解可以放在实体里面，可以放在 super-class 里面，也可以定义在 entity 的 listener 里面，但需要注意的是：放在实体（或者 super-class）里面的方法，签名格式为“void ()”，即没有参数，方法里面操作的是 this 对象自己；放在实体的 EntityListener 里面的方法签名格式为“void (Object)”，也就是方法可以有参数，参数是代表用来接收回调方法的实体。
+    * 使上述注解生效的回调方法可以是 public、private、protected、friendly 类型的，但是不能是 static 和 finnal 类型的方法。
+
+  * 实操
+
+    ```java
+    第一种用法：在实体和 super-class 中使用
+    第一步：修改 BaseEntity，在里面新增回调函数和注解，代码如下:
+    import lombok.Data;
+    import org.springframework.data.annotation.*;
+    import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+    import javax.persistence.*;
+    import java.time.Instant;
+    @Data
+    @MappedSuperclass
+    @EntityListeners(AuditingEntityListener.class)
+    public class BaseEntity {
+       @Id
+       @GeneratedValue(strategy= GenerationType.AUTO)
+       private Long id;
+    // @CreatedBy 这个可能会被 AuditingEntityListener覆盖，为了方便测试，我们先注释掉
+       private Integer createUserId;
+       @CreatedDate
+       private Instant createTime;
+       @LastModifiedBy
+       private Integer lastModifiedUserId;
+       @LastModifiedDate
+       private Instant lastModifiedTime;
+    //  @Version 由于本身有乐观锁机制，这个我们测试的时候先注释掉，改用手动设置的值；
+       private Integer version;
+       @PreUpdate
+       public void preUpdate() {
+          System.out.println("preUpdate::"+this.toString());
+          this.setCreateUserId(200);
+       }
+       @PostUpdate
+       public void postUpdate() {
+          System.out.println("postUpdate::"+this.toString());
+       }
+       @PreRemove
+       public void preRemove() {
+          System.out.println("preRemove::"+this.toString());
+       }
+       @PostRemove
+       public void postRemove() {
+          System.out.println("postRemove::"+this.toString());
+       }
+       @PostLoad
+       public void postLoad() {
+          System.out.println("postLoad::"+this.toString());
+       }
+    }
+    第二步：修改一下 User 类，也新增两个回调函数，并且和 BaseEntity 做法一样，代码如下：
+    import com.example.jpa.example1.base.BaseEntity;
+    import com.fasterxml.jackson.annotation.JsonIgnore;
+    import lombok.*;
+    import javax.persistence.*;
+    import java.util.List;
+    @Entity
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @ToString(exclude = "addresses",callSuper = true)
+    @EqualsAndHashCode(callSuper=false)
+    public class User extends BaseEntity {// implements Auditable<Integer,Long, Instant> {
+       private String name;
+       private String email;
+       @Enumerated(EnumType.STRING)
+       private SexEnum sex;
+       private Integer age;
+       @OneToMany(mappedBy = "user")
+       @JsonIgnore
+       private List<UserAddress> addresses;
+       private Boolean deleted;
+       @PrePersist
+       private void prePersist() {
+          System.out.println("prePersist::"+this.toString());
+          this.setVersion(1);
+       }
+       @PostPersist
+       public void postPersist() {
+          System.out.println("postPersist::"+this.toString());
+       }
+    }
+    
+    第二种用法：自定义 EntityListener
+    第一步：自定义一个 EntityLoggingListenner 用来记录操作日志，通过 listener 的方式配置回调函数注解，代码如下:
+    import com.example.jpa.example1.User;
+    import lombok.extern.log4j.Log4j2;
+    import javax.persistence.*;
+    @Log4j2
+    public class EntityLoggingListener {
+        @PrePersist
+        private void prePersist(BaseEntity entity) {
+            log.info("prePersist::{}",entity.toString());
+        }
+        @PostPersist
+        public void postPersist(Object entity) {
+            log.info("postPersist::{}",entity.toString());
+        }
+        @PreUpdate
+        public void preUpdate(BaseEntity entity) {
+            log.info("preUpdate::{}",entity.toString());
+        }
+        @PostUpdate
+        public void postUpdate(Object entity) {
+            log.info("postUpdate::{}",entity.toString());
+        }
+        @PreRemove
+        public void preRemove(Object entity) {
+            log.info("preRemove::{}",entity.toString());
+        }
+        @PostRemove
+        public void postRemove(Object entity) {
+            log.info("postRemove::{}",entity.toString());
+        }
+        @PostLoad
+        public void postLoad(Object entity) {
+        //查询方法里面可以对一些敏感信息做一些日志
+            if (User.class.isInstance(entity)) {
+                log.info("postLoad::{}",entity.toString());
+            }
+        }
+    }
+    
+    
+    如果在 @PostLoad 里面记录日志，不一定每个实体、每次查询都需要记录日志，只需要对一些敏感的实体或者字段做日志记录即可。
+    
+    回调函数时我们可以加上参数，这个参数可以是父类 Object，可以是 BaseEntity，也可以是具体的某一个实体；我推荐用 BaseEntity，因为这样的方法是类型安全的，它可以约定一些框架逻辑，比如 getCreateUserId、getLastModifiedUserId 等。
+    ```
+
+  * 关于 @EntityListeners 加载顺序的说明
+
+    * 默认如果子类和父类都有 EntityListeners，那么 listeners 会按照加载的顺序执行所有 EntityListeners；
+
+    * EntityListeners 和实体里面的回调函数注解可以同时使用，但需要注意顺序问题；
+
+    * 如果我们不想加载super-class里面的EntityListeners，那么我们可以通过注解 @ExcludeSuperclassListeners，排除所有父类里面的实体监听者，需要用到的时候，我们再在子类实体里面重新引入即可，代码如下：
+
+      ```java
+      @ExcludeSuperclassListeners
+      public class User extends BaseEntity {
+      ......}
+      ```
+
+* JPA Callbacks 的最佳实践
+
+  * 注意回调函数方法要在同一个事务中进行，异常要可预期，非可预期的异常要进行捕获，以免出现意想不到的线上 Bug；
+
+  * 回调函数方法是同步的，如果一些计算量大的和一些耗时的操作，可以通过发消息等机制异步处理，以免阻塞主流程，影响接口的性能。比如上面说的日志，如果我们要将其记录到数据库里面，可以在回调方法里面发个消息，改进之后将变成如下格式：
+
+    ```java
+    public class AuditLoggingListener {
+       @PostLoad
+       private void postLoad(Object entity) {
+          this.notice(entity, OperateType.load);
+       }
+       @PostPersist
+       private void postPersist(Object entity) {
+          this.notice(entity, OperateType.create);
+       }
+       @PostRemove
+       private void PostRemove(Object entity) {
+          this.notice(entity, OperateType.remove);
+       }
+       @PostUpdate
+       private void PostUpdate(Object entity) {
+          this.notice(entity, OperateType.update);
+       }
+       private void notice(Object entity, OperateType type) {
+          //我们通过active mq 异步发出消息处理事件
+          ActiveMqEventManager.notice(new ActiveMqEvent(type, entity));
+       }
+       @Getter
+       enum OperateType {
+          create("创建"), remove("删除"),update("修改"),load("查询");
+          private final String description;
+          OperateType(String description) {
+             this.description=description;
+          }
+       }
+    }
+    ```
+
+  * 在回调函数里面，尽量不要直接在操作 EntityManager 后再做 session 的整个生命周期的其他持久化操作，以免破坏事务的处理流程；也不要进行其他额外的关联关系更新动作，业务性的代码一定要放在 service 层面，否则太过复杂，时间长了代码很难维护；
+
+  * 回调函数里面比较适合用一些计算型的transient方法，如下面这个操作：
+
+    ```java
+    public class UserListener {
+        @PrePersist
+        public void prePersist(User user) {
+            //通过一些逻辑计算年龄；
+            user.calculationAge();
+        }
+    }
+    ```
+
+* 乐观锁
+
+  * 乐观锁在实际开发过程中很常用，它没有加锁、没有阻塞，在多线程环境以及高并发的情况下 CPU 的利用率是最高的，吞吐量也是最大的。
+
+  * 而 Java Persistence API 协议也对乐观锁的操作做了规定：**通过指定 @Version 字段对数据增加版本号控制，进而在更新的时候判断版本号是否有变化。如果没有变化就直接更新；如果有变化，就会更新失败并抛出“OptimisticLockException”异常**。我们用 SQL 表示一下乐观锁的做法，代码如下：
+
+    ```sql
+    select uid,name,version from user where id=1;
+    update user set name='jack', version=version+1 where id=1 and version=1
+    ```
+
+  * 乐观锁的实现方法
+
+    * JPA 协议规定，想要实现乐观锁可以通过 @Version 注解标注在某个字段上面，并且可以持久化到 DB 即可。其支持的类型有如下四种：
+      * ` int`or`Integer`
+      * ` short`or`Short`
+      * ` long`or`Long`
+      * ` java.sql.Timestamp`
+      * 注意：Spring Data JPA 里面有两个 @Version 注解，请使用 **@javax.persistence.Version**，而不是 @org.springframework.data.annotation.Version。
+    * 注意：乐观锁异常不仅仅是同一个方法多线程才会出现的问题，我们只是为了方便测试而采用同一个方法；不同的方法、不同的项目，都有可能导致乐观锁异常。乐观锁的本质是 SQL 层面发生的，和使用的框架、技术没有关系。
+
+* Spring 支持的重试机制
+
+  * Spring 全家桶里面提供了@Retryable 的注解，会帮我们进行重试。下面看一个 @Retryable 的例子。
+
+    ```
+    org.springframework.retry:spring-retry
+    ```
+
+  * 第二步：在 UserInfoserviceImpl 的方法中添加 @Retryable 注解，就可以实现重试的机制了
+
+  * 第三步：新增一个RetryConfiguration并添加@EnableRetry 注解，是为了开启重试机制，使 @Retryable 生效。
+
+    ```
+    @EnableRetry
+    @Configuration
+    public class RetryConfiguration {
+    }
+    ```
+
+    * maxAttempts：最大重试次数，默认为 3，如果要设置的重试次数为 3，可以不写；
+
+    * value：抛出指定异常才会重试；
+
+    *  include：和 value 一样，默认为空，当 exclude 也为空时，默认异常；
+
+    *  exclude：指定不处理的异常；
+
+    *  backoff：重试等待策略，默认使用 @Backoff@Backoff 的 value，默认为 1s
+
+      * value=delay：隔多少毫秒后重试，默认为 1000L，单位是毫秒；
+      * multiplier（指定延迟倍数）默认为 0，表示固定暂停 1 秒后进行重试，如果把 multiplier 设置为 1.5，则第一次重试为 2 秒，第二次为 3 秒，第三次为 4.5 秒。
+    
+    ```
+    @Service 
+    public interface MyService { 
+      @Retryable( value = SQLException.class, maxAttemptsExpression = "${retry.maxAttempts}",
+                backoff = @Backoff(delayExpression = "${retry.maxDelay}")) 
+      void retryServiceWithExternalizedConfiguration(String sql) throws SQLException; 
+    }
+    ```
+    
+    * https://github.com/spring-projects/spring-retry
+    
+    ```
+    @Retryable(value = ObjectOptimisticLockingFailureException.class,backoff = @Backoff(multiplier = 1.5,random = true))
+    ```
+
+  ```
+  public enum LockModeType
+  {
+      //等同于OPTIMISTIC，默认，用来兼容2.0之前的协议
+      READ,
+      //等同于OPTIMISTIC_FORCE_INCREMENT，用来兼容2.0之前的协议
+      WRITE,
+      //乐观锁，默认，2.0协议新增
+      OPTIMISTIC,
+      //乐观写锁，强制version加1，2.0协议新增
+      OPTIMISTIC_FORCE_INCREMENT,
+      //悲观读锁 2.0协议新增
+      PESSIMISTIC_READ,
+      //悲观写锁，version不变，2.0协议新增
+      PESSIMISTIC_WRITE,
+      //悲观写锁，version会新增，2.0协议新增
+      PESSIMISTIC_FORCE_INCREMENT,
+      //2.0协议新增无锁状态
+      NONE
+  }
+  
+  public interface UserInfoRepository extends JpaRepository<UserInfo, Long> {
+      @Lock(LockModeType.PESSIMISTIC_WRITE)
+      Optional<UserInfo> findById(Long userId);
+  }
+  ```
+
+* JPA 对 Web MVC 
+
+  * 支持在 Controller 层直接返回实体，而不使用其显式的调用方法；
+  *  对 MVC 层支持标准的分页和排序功能；
+  * 扩展的插件支持 Querydsl，可以实现一些通用的查询逻辑。
+
+  ```
+  @Configuration
+  @EnableWebMvc
+  //开启支持Spring Data Web的支持
+  @EnableSpringDataWebSupport
+  public class WebConfiguration { }
+  ```
+
+  * DomainClassConverter 组件
+
+    * 这个组件的主要作用是帮我们把 Path 中 ID 的变量，或 Request 参数中的变量 ID 的参数值，直接转化成实体对象注册到 Controller 方法的参数里面。
+
+  * @DynamicUpdate & @DynamicInsert 详解
+
+    ```
+    @DynamicInsert：这个注解表示 insert 的时候，会动态生产 insert SQL 语句，其生成 SQL 的规则是：只有非空的字段才能生成 SQL。
+    @Target( TYPE )
+    @Retention( RUNTIME )
+    public @interface DynamicInsert {
+       //默认是true，如果设置成false，就表示空的字段也会生成sql语句；
+       boolean value() default true;
+    }
+    这个注解主要是用在 @Entity 的实体中，如果加上这个注解，就表示生成的 insert SQL 的 Columns 只包含非空的字段；如果实体中不加这个注解，默认的情况是空的，字段也会作为 insert 语句里面的 Columns。
+    
+    @DynamicUpdate：和 insert 是一个意思，只不过这个注解指的是在 update 的时候，会动态产生 update SQL 语句，生成 SQL 的规则是：只有非空的字段才会生成到 update SQL 的 Columns 里面
+    @Target( TYPE )
+    @Retention( RUNTIME )
+    public @interface DynamicUpdate {
+       //和insert里面一个意思，默认true;
+       boolean value() default true;
+    }
+    和上一个注解的原理类似，这个注解也是用在 @Entity 的实体中，如果加上这个注解，就表示生成的 update SQL 的 Columns 只包含非空的字段；如果不加这个注解，默认的情况是空的字段也会作为 update 语句里面的 Columns。
+    ```
+
+* HandlerMethodArgumentResolvers 详解
+
+  * HandlerMethodArgumentResolvers 在 Spring MVC 中的主要作用是对 Controller 里面的方法参数做解析，即可以把 Request 里面的值映射到方法的参数中。
+
+    ```java
+    public interface HandlerMethodArgumentResolver {
+       //检查方法的参数是否支持处理和转化
+       boolean supportsParameter(MethodParameter parameter);
+       //根据reqest上下文，解析方法的参数
+       Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
+             NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception;
+    }
+    ```
+
+  ```java
+  第一步：新建 MyPageableHandlerMethodArgumentResolver。
+  这个类的作用有两个：
+      用来兼容 ?page[size]=2&page[number]=0 的参数情况；
+      支持 JPA 新的参数形式 ?size=2&page=0。
+      
+  /**
+   * 通过@Component把此类加载到Spring的容器里面去 
+   */
+  @Component
+  public class MyPageableHandlerMethodArgumentResolver extends PageableHandlerMethodArgumentResolver implements HandlerMethodArgumentResolver {
+     //我们假设sort的参数没有发生变化，采用PageableHandlerMethodArgumentResolver里面的写法
+     private static final SortHandlerMethodArgumentResolver DEFAULT_SORT_RESOLVER = new SortHandlerMethodArgumentResolver();
+     //给定两个默认值
+     private static final Integer DEFAULT_PAGE = 0;
+     private static final Integer DEFAULT_SIZE = 10;
+     //兼容新版，引入JPA的分页参数
+     private static final String JPA_PAGE_PARAMETER = "page";
+     private static final String JPA_SIZE_PARAMETER = "size";
+     //兼容原来老的分页参数
+     private static final String DEFAULT_PAGE_PARAMETER = "page[number]";
+     private static final String DEFAULT_SIZE_PARAMETER = "page[size]";
+     private SortArgumentResolver sortResolver;
+     //模仿PageableHandlerMethodArgumentResolver里面的构造方法
+     public MyPageableHandlerMethodArgumentResolver(@Nullable SortArgumentResolver sortResolver) {
+        this.sortResolver = sortResolver == null ? DEFAULT_SORT_RESOLVER : sortResolver;
+     }
+     
+     @Override
+     public boolean supportsParameter(MethodParameter parameter) {
+  //    假设用我们自己的类MyPageRequest接收参数
+        return MyPageRequest.class.equals(parameter.getParameterType());
+        //同时我们也可以支持通过Spring Data JPA里面的Pageable参数进行接收，两种效果是一样的
+  //    return Pageable.class.equals(parameter.getParameterType());
+     }
+     /**
+      * 参数封装逻辑page和sort，JPA参数的优先级高于page[number]和page[size]参数
+      */
+      //public Pageable resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest, WebDataBinderFactory binderFactory) { //这种是Pageable的方式
+     @Override
+     public MyPageRequest resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
+        String jpaPageString = webRequest.getParameter(JPA_PAGE_PARAMETER);
+        String jpaSizeString = webRequest.getParameter(JPA_SIZE_PARAMETER);
+        //我们分别取参数里面page、sort和 page[number]、page[size]的值
+        String pageString = webRequest.getParameter(DEFAULT_PAGE_PARAMETER);
+        String sizeString = webRequest.getParameter(DEFAULT_SIZE_PARAMETER);
+        //当两个都有值时候的优先级，及其默认值的逻辑
+        Integer page = jpaPageString != null ? Integer.valueOf(jpaPageString) : pageString != null ? Integer.valueOf(pageString) : DEFAULT_PAGE;
+        //在这里同时可以计算 page+1的逻辑;如：page=page+1;
+        Integer size = jpaSizeString != null ? Integer.valueOf(jpaSizeString) : sizeString != null ? Integer.valueOf(sizeString) : DEFAULT_SIZE;
+         //我们假设，sort排序的取值方法先不发生改变
+        Sort sort = sortResolver.resolveArgument(parameter, mavContainer, webRequest, binderFactory);
+  //    如果使用Pageable参数接收值，我们也可以不用自定义MyPageRequest对象，直接返回PageRequest;
+  //    return PageRequest.of(page,size,sort);
+        //将page和size计算出来的记过封装到我们自定义的MyPageRequest类里面去
+        MyPageRequest myPageRequest = new MyPageRequest(page, size,sort);
+        //返回controller里面的参数需要的对象；
+        return myPageRequest;
+     }
+  }
+  
+  /**
+   * 继承父类，可以省掉很多计算page和index的逻辑
+   */
+  public class MyPageRequest extends PageRequest {
+     protected MyPageRequest(int page, int size, Sort sort) {
+        super(page, size, sort);
+     }
+  }
+  第三步：implements WebMvcConfigurer 加载 myPageableHandlerMethodArgumentResolver。
+  
+  /**
+   * 实现WebMvcConfigurer
+   */
+  @Configuration
+  public class MyWebMvcConfigurer implements WebMvcConfigurer {
+     @Autowired
+     private MyPageableHandlerMethodArgumentResolver myPageableHandlerMethodArgumentResolver;
+     /**
+      * 覆盖这个方法，把我们自定义的myPageableHandlerMethodArgumentResolver加载到原始的mvc的resolvers里面去
+      * @param resolvers
+      */
+     @Override
+     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
+        resolvers.add(myPageableHandlerMethodArgumentResolver);
+     }
+  }
+  第四步：我们看下 Controller 里面的写法。
+  //用Pageable这种方式也是可以的
+  @GetMapping("/users")
+  public Page<UserInfo> queryByPage(Pageable pageable, UserInfo userInfo) {
+     return userInfoRepository.findAll(Example.of(userInfo),pageable);
+  }
+  //用MyPageRequest进行接收
+  @GetMapping("/users/mypage")
+  public Page<UserInfo> queryByMyPage(MyPageRequest pageable, UserInfo userInfo) {
+     return userInfoRepository.findAll(Example.of(userInfo),pageable);
+  }
+  ```
+
+* 实操
+
+  ```java
+  在实际的工作中，还经常会遇到“取当前用户”的应用场景。此时，普通做法是，当使用到当前用户的 UserInfo 时，每次都需要根据请求 header 的 token 取到用户信息，伪代码如下所示：
+  @PostMapping("user/info")
+  public UserInfo getUserInfo(@RequestHeader String token) {
+      // 伪代码
+      Long userId = redisTemplate.get(token);
+      UserInfo useInfo = userInfoRepository.getById(userId);
+      return userInfo;
+  }
+  
+  如果我们使用HandlerMethodArgumentResolver接口来实现，代码就会变得优雅许多。伪代码如下：
+  // 1. 实现HandlerMethodArgumentResolver接口
+  @Component
+  public class UserInfoArgumentResolver implements HandlerMethodArgumentResolver {
+     private final RedisTemplate redisTemplate;//伪代码，假设我们token是放在redis里面的
+     private final UserInfoRepository userInfoRepository;
+     public UserInfoArgumentResolver(RedisTemplate redisTemplate, UserInfoRepository userInfoRepository) {
+        this.redisTemplate = redisTemplate;//伪代码，假设我们token是放在redis里面的
+        this.userInfoRepository = userInfoRepository;
+     }
+     @Override
+     public boolean supportsParameter(MethodParameter parameter) {
+        return UserInfo.class.isAssignableFrom(parameter.getParameterType());
+     }
+     @Override
+     public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+                            NativeWebRequest webRequest, WebDataBinderFactory binderFactory) throws Exception {
+        HttpServletRequest nativeRequest = (HttpServletRequest) webRequest.getNativeRequest();
+        String token = nativeRequest.getHeader("token");
+        Long userId = (Long) redisTemplate.opsForValue().get(token);//伪代码，假设我们token是放在redis里面的
+        UserInfo useInfo = userInfoRepository.getOne(userId);
+        return useInfo;
+     }
+  }
+  //2. 我们只需要在MyWebMvcConfigurer里面把userInfoArgumentResolver添加进去即可，关键代码如下：
+  @Configuration
+  public class MyWebMvcConfigurer implements WebMvcConfigurer {
+     @Autowired
+     private MyPageableHandlerMethodArgumentResolver myPageableHandlerMethodArgumentResolver;
+  @Autowired
+  private UserInfoArgumentResolver userInfoArgumentResolver;
+  @Override
+  public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
+     resolvers.add(myPageableHandlerMethodArgumentResolver);
+     //我们只需要把userInfoArgumentResolver加入resolvers中即可
+     resolvers.add(userInfoArgumentResolver);
+  }
+  }
+  // 3. 在Controller中使用
+  @RestController
+  public class UserInfoController {
+    //获得当前用户的信息
+    @GetMapping("user/info")
+    public UserInfo getUserInfo(UserInfo userInfo) {
+       return userInfo;
+    }
+    //给当前用户 say hello
+    @PostMapping("sayHello")
+    public String sayHello(UserInfo userInfo) {
+      return "hello " + userInfo.getTelephone();
+    }
+  }
+  ```
+
+* WebMvcConfigurer 介绍
+
+  ```java
+   /* 拦截器配置 */
+  void addInterceptors(InterceptorRegistry var1);
+  /* 视图跳转控制器 */
+  void addViewControllers(ViewControllerRegistry registry);
+  /**
+    *静态资源处理
+  **/
+  void addResourceHandlers(ResourceHandlerRegistry registry);
+  /* 默认静态资源处理器 */
+  void configureDefaultServletHandling(DefaultServletHandlerConfigurer configurer);
+  /**
+    *这里配置视图解析器
+   **/
+  void configureViewResolvers(ViewResolverRegistry registry);
+  /* 配置内容裁决的一些选项*/
+  void configureContentNegotiation(ContentNegotiationConfigurer configurer);
+  /** 解决跨域问题 **/
+  void addCorsMappings(CorsRegistry registry) ;
+  /** 添加都会contoller的Return的结果的处理 **/
+  void addReturnValueHandlers(List<HandlerMethodReturnValueHandler> handlers)；
+  ```
+
+  *  用 Result 对 JSON 的返回结果进行统一封装
+
+    ```
+    第一步：我们自定义一个注解 @WarpWithData，表示此注解包装的返回结果用 Data 进行包装，代码如下：
+    @Target({ElementType.TYPE, ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    @Documented
+    /**
+     * 自定义一个注解对返回结果进行包装
+     */
+    public @interface WarpWithData {
+    }
+    
+    第二步：自定义 MyWarpWithDataHandlerMethodReturnValueHandler，并继承 RequestResponseBodyMethodProcessor 来实现 HandlerMethodReturnValueHandler 接口，用来处理 Data 包装的结果，代码如下：
+    //自定义自己的return的处理类，我们直接继承RequestResponseBodyMethodProcessor，这样父类里面的方法我们直接使用就可以了
+    @Component
+    public class MyWarpWithDataHandlerMethodReturnValueHandler extends RequestResponseBodyMethodProcessor implements HandlerMethodReturnValueHandler {
+       //参考父类RequestResponseBodyMethodProcessor的做法
+       @Autowired
+       public MyWarpWithDataHandlerMethodReturnValueHandler(List<HttpMessageConverter<?>> converters) {
+          super(converters);
+       }
+       //只处理需要包装的注解的方法
+       @Override
+       public boolean supportsReturnType(MethodParameter returnType) {
+          return returnType.hasMethodAnnotation(WarpWithData.class);
+       }
+       //将返回结果包装一层Data
+       @Override
+       public void handleReturnValue(Object returnValue, MethodParameter methodParameter, ModelAndViewContainer modelAndViewContainer, NativeWebRequest nativeWebRequest) throws IOException, HttpMediaTypeNotAcceptableException {
+          Map<String,Object> res = new HashMap<>();
+          res.put("data",returnValue);
+          super.handleReturnValue(res,methodParameter,modelAndViewContainer,nativeWebRequest);
+       }
+    }
+    
+    第三步：在 MyWebMvcConfigurer 里面直接把 myWarpWithDataHandlerMethodReturnValueHandler 加入 handlers 里面即可，也是通过覆盖父类 WebMvcConfigurer 里面的 addReturnValueHandlers 方法完成的，关键代码如下：
+    @Configuration
+    public class MyWebMvcConfigurer implements WebMvcConfigurer {
+       @Autowired
+       private MyWarpWithDataHandlerMethodReturnValueHandler myWarpWithDataHandlerMethodReturnValueHandler;
+       //把我们自定义的myWarpWithDataHandlerMethodReturnValueHandler加入handlers里面即可
+       @Override
+       public void addReturnValueHandlers(List<HandlerMethodReturnValueHandler> handlers) {
+          handlers.add(myWarpWithDataHandlerMethodReturnValueHandler);
+       }
+       
+      @Autowired
+      private RequestMappingHandlerAdapter requestMappingHandlerAdapter;
+      //由于HandlerMethodReturnValueHandler处理的优先级问题，我们通过如下方法，把我们自定义的myWarpWithDataHandlerMethodReturnValueHandler放到第一个；
+      @PostConstruct
+      public void init() {
+         List<HandlerMethodReturnValueHandler> returnValueHandlers = Lists.newArrayList(myWarpWithDataHandlerMethodReturnValueHandler);
+    //取出原始列表，重新覆盖进去；
+            returnValueHandlers.addAll(requestMappingHandlerAdapter.getReturnValueHandlers());
+         requestMappingHandlerAdapter.setReturnValueHandlers(returnValueHandlers);
+      }
+    }
+    ```
+
+  * 数据源
+
+    ```yaml
+    https://github.com/brettwooldridge/HikariCP
+    ## 最小空闲链接数量
+    spring.datasource.hikari.minimum-idle=5
+    ## 空闲链接存活最大时间，默认600000（10分钟）
+    spring.datasource.hikari.idle-timeout=180000
+    ## 链接池最大链接数，默认是10
+    spring.datasource.hikari.maximum-pool-size=10
+    ## 此属性控制从池返回的链接的默认自动提交行为,默认值：true
+    spring.datasource.hikari.auto-commit=true
+    ## 数据源链接池的名称
+    spring.datasource.hikari.pool-name=MyHikariCP
+    ## 此属性控制池中链接的最长生命周期，值0表示无限生命周期，默认1800000即30分钟
+    spring.datasource.hikari.max-lifetime=1800000
+    ## 数据库链接超时时间,默认30秒，即30000
+    spring.datasource.hikari.connection-timeout=30000
+    spring.datasource.hikari.connection-test-query=SELECT 1mysql
+    
+    Hikari 数据源下的 MySQL 配置最佳实践
+    ##数据源的配置：logger=Slf4JLogger&profileSQL=true是用来debug显示sql的执行日志的
+    spring.datasource.url=jdbc:mysql://localhost:3306/test?logger=Slf4JLogger&profileSQL=true
+    spring.datasource.username=root
+    spring.datasource.password=E6kroWaR9F
+    ##采用默认的
+    #spring.datasource.hikari.connectionTimeout=30000
+    #spring.datasource.hikari.idleTimeout=300000
+    ##指定一个链接池的名字，方便我们分析线程问题
+    spring.datasource.hikari.pool-name=jpa-hikari-pool
+    ##最长生命周期15分钟够了
+    spring.datasource.hikari.maxLifetime=900000
+    spring.datasource.hikari.maximumPoolSize=8
+    ##最大和最小相对应减少创建线程池的消耗；
+    spring.datasource.hikari.minimumIdle=8
+    spring.datasource.hikari.connectionTestQuery=select 1 from dual
+    ##当释放连接到连接池之后，采用默认的自动提交事务
+    spring.datasource.hikari.autoCommit=true
+    ##用来显示链接测trace日志
+    logging.level.com.zaxxer.hikari.HikariConfig=DEBUG 
+    logging.level.com.zaxxer.hikari=TRACE
+    ```
+
+  * Granfan 图表或者 Prometheus 
+
+    * https://github.com/prometheus-operator/prometheus-operator
+
+* Naming 命名策略详解及其实践
+
+  * 第一步：通过ImplicitNamingStrategy先找到实例里面定义的逻辑的字段名字。
+
+    ```java
+    这是通过ImplicitNamingStrategy 的实现类指定逻辑字段查找策略，也就是当实体里面定义了 @Table、@Column 注解的时候，以注解指定名字返回；而当没有这些注解的时候，返回的是实体里面的字段的名字。
+    其中，org.hibernate.boot.model.naming.ImplicitNamingStrategy 是一个接口，ImplicitNamingStrategyJpaCompliantImpl 这个实现类兼容 JPA 2.0 的字段映射规范。除此之外，还有如下四个实现类：
+    * ImplicitNamingStrategyLegacyHbmImpl：兼容 Hibernate 老版本中的命名规范；
+    * ImplicitNamingStrategyLegacyJpaImpl：兼容 JPA 1.0 规范中的命名规范；
+    * ImplicitNamingStrategyComponentPathImpl：@Embedded 等注解标志的组件处理是通过 attributePath 完成的，因此如果我们在使用 @Embedded 注解的时候，如果要指定命名规范，可以直接继承这个类来实现；
+    * SpringImplicitNamingStrategy：默认的 spring data 2.2.3 的策略，只是扩展了 ImplicitNamingStrategyJpaCompliantImpl 里面的 JoinTableName 的方法
+    ```
+
+  * 第二步：通过 PhysicalNamingStrategy 将逻辑字段转化成数据库的物理字段名字。
+
+    ```
+    它的实现类负责将逻辑字段转化成带下划线，或者统一给字段加上前缀，又或者加上双引号等格式的数据库字段名字，其主要的接口是：org.hibernate.boot.model.naming.PhysicalNamingStrategy，而它的实现类也只有两个.
+    
+    PhysicalNamingStrategyStandardImpl：这个类什么都没干，即直接将第一个步骤得到的逻辑字段名字当成数据库的字段名字使用。这个主要的应用场景是，如果某些字段的命名格式不是下划线的格式，我们想通过 @Column 的方式显示声明的话，可以把默认第二步的策略改成 PhysicalNamingStrategyStandardImpl。
+    userInfo -> userInfo
+    id->id
+    ages->ages
+    lastName -> lastName
+    myAddress -> myAddress
+    
+    SpringPhysicalNamingStrategy：这个类是将第一步得到的逻辑字段名字的大写字母前面加上下划线，并且全部转化成小写，将会标识出是否需要加上双引号。此种是默认策略。
+    userInfo -> user_info
+    id->id
+    ages->ages
+    lastName -> last_name
+    myAddress -> my_address
+    ```
+
+  * 加载原理与自定义方法
+
+    ```
+    如果我们修改默认策略，只需要在 application.properties 里面修改下面代码所示的两个配置，换成自己的自定义的类即可。
+    spring.jpa.hibernate.naming.implicit-strategy=org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy
+    spring.jpa.hibernate.naming.physical-strategy=org.springframework.boot.orm.jpa.hibernate.SpringPhysicalNamingStrategy
+    ```
+
+* **生产环境多数据源的处理方法**
+
+  * 第一种方式：多个数据源的 @Configuration 的配置方法
+
+    ```
+    这种方式的主要思路是，不同 Package 下面的实体和 Repository 采用不同的 Datasource。所以我们改造一下我们的 example 目录结构，来看看不同 Repositories 的数据源是怎么处理的。
+    ```
+
+  * **第一步：规划 Entity 和 Repository 的目录结构，为了方便配置多数据源。**
+
+    ```
+    将 User 和 UserAddress、UserRepository 和 UserAddressRepository 移动到 db1 里面；将 UserInfo 和 UserInfoRepository 移动到 db2 里面。
+    
+    我们把实体和 Repository 分别放到了 db1 和 db2 两个目录里面，这时我们假设数据源 1 是 MySQL，User 表和 UserAddress 在数据源 1 里面，那么我们需要配置一个 DataSource1 的 Configuration 类，并且在里面配置 DataSource、TransactionManager 和 EntityManager。
+    ```
+
+  * **第二步：配置 DataSource1Config 类。**
+
+    ```java
+    目录结构调整完之后，接下来我们开始配置数据源，完整代码如下：
+    @Configuration
+    @EnableTransactionManagement//开启事务
+    //利用EnableJpaRepositories配置哪些包下面的Repositories，采用哪个EntityManagerFactory和哪个trannsactionManager
+    @EnableJpaRepositories(
+          basePackages = {"com.example.jpa.example1.db1"},//数据源1的repository的包路径
+          entityManagerFactoryRef = "db1EntityManagerFactory",//改变数据源1的EntityManagerFactory的默认值，改为db1EntityManagerFactory
+          transactionManagerRef = "db1TransactionManager"//改变数据源1的transactionManager的默认值，改为db1TransactionManager
+          )
+    public class DataSource1Config {
+       /**
+        * 指定数据源1的dataSource配置
+        * @return
+        */
+       @Primary
+       @Bean(name = "db1DataSourceProperties")
+       @ConfigurationProperties("spring.datasource1") //数据源1的db配置前缀采用spring.datasource1
+       public DataSourceProperties dataSourceProperties() {
+          return new DataSourceProperties();
+       }
+       /**
+        * 可以选择不同的数据源，这里我用HikariDataSource举例，创建数据源1
+        * @param db1DataSourceProperties
+        * @return
+        */
+       @Primary
+       @Bean(name = "db1DataSource")
+       @ConfigurationProperties(prefix = "spring.datasource.hikari.db1") //配置数据源1所用的hikari配置key的前缀
+       public HikariDataSource dataSource(@Qualifier("db1DataSourceProperties") DataSourceProperties db1DataSourceProperties) {
+          HikariDataSource dataSource = db1DataSourceProperties.initializeDataSourceBuilder().type(HikariDataSource.class).build();
+          if (StringUtils.hasText(db1DataSourceProperties.getName())) {
+             dataSource.setPoolName(db1DataSourceProperties.getName());
+          }
+          return dataSource;
+       }
+       /**
+        * 配置数据源1的entityManagerFactory命名为db1EntityManagerFactory，用来对实体进行一些操作
+        * @param builder
+        * @param db1DataSource entityManager依赖db1DataSource
+        * @return
+        */
+       @Primary
+       @Bean(name = "db1EntityManagerFactory")
+       public LocalContainerEntityManagerFactoryBean entityManagerFactory(EntityManagerFactoryBuilder builder, @Qualifier("db1DataSource") DataSource db1DataSource) {
+          return builder.dataSource(db2DataSource)
+    .packages("com.example.jpa.example1.db1") //数据1的实体所在的路径
+    .persistenceUnit("db1")// persistenceUnit的名字采用db1
+    .build();
+       }
+       /**
+        * 配置数据源1的事务管理者，命名为db1TransactionManager依赖db1EntityManagerFactory
+        * @param db1EntityManagerFactory 
+        * @return
+        */
+       @Primary
+       @Bean(name = "db1TransactionManager")
+       public PlatformTransactionManager transactionManager(@Qualifier("db1EntityManagerFactory") EntityManagerFactory db1EntityManagerFactory) {
+          return new JpaTransactionManager(db1EntityManagerFactory);
+       }
+    }
+    ```
+
+  * **第三步：配置 DataSource2Config类，加载数据源 2。**
+
+    ```java
+    @Configuration
+    @EnableTransactionManagement//开启事务
+    //利用EnableJpaRepositories，配置哪些包下面的Repositories，采用哪个EntityManagerFactory和哪个trannsactionManager
+    @EnableJpaRepositories(
+            basePackages = {"com.example.jpa.example1.db2"},//数据源2的repository的包路径
+            entityManagerFactoryRef = "db2EntityManagerFactory",//改变数据源2的EntityManagerFactory的默认值，改为db2EntityManagerFactory
+            transactionManagerRef = "db2TransactionManager"//改变数据源2的transactionManager的默认值，改为db2TransactionManager
+    )
+    public class DataSource2Config {
+        /**
+         * 指定数据源2的dataSource配置
+         *
+         * @return
+         */
+        @Bean(name = "db2DataSourceProperties")
+        @ConfigurationProperties("spring.datasource2") //数据源2的db配置前缀采用spring.datasource2
+        public DataSourceProperties dataSourceProperties() {
+            return new DataSourceProperties();
+        }
+        /**
+         * 可以选择不同的数据源，这里我用HikariDataSource举例，创建数据源2
+         *
+         * @param db2DataSourceProperties
+         * @return
+         */
+        @Bean(name = "db2DataSource")
+        @ConfigurationProperties(prefix = "spring.datasource.hikari.db2") //配置数据源2的hikari配置key的前缀
+        public HikariDataSource dataSource(@Qualifier("db2DataSourceProperties") DataSourceProperties db2DataSourceProperties) {
+            HikariDataSource dataSource = db2DataSourceProperties.initializeDataSourceBuilder().type(HikariDataSource.class).build();
+            if (StringUtils.hasText(db2DataSourceProperties.getName())) {
+                dataSource.setPoolName(db2DataSourceProperties.getName());
+            }
+            return dataSource;
+        }
+        /**
+         * 配置数据源2的entityManagerFactory命名为db2EntityManagerFactory，用来对实体进行一些操作
+         *
+         * @param builder
+         * @param db2DataSource entityManager依赖db2DataSource
+         * @return
+         */
+        @Bean(name = "db2EntityManagerFactory")
+        public LocalContainerEntityManagerFactoryBean entityManagerFactory(EntityManagerFactoryBuilder builder, @Qualifier("db2DataSource") DataSource db2DataSource) {
+            return builder.dataSource(db2DataSource)
+                .packages("com.example.jpa.example1.db2") //数据2的实体所在的路径
+                .persistenceUnit("db2")// persistenceUnit的名字采用db2
+                .build();
+        }
+        /**
+         * 配置数据源2的事务管理者，命名为db2TransactionManager依赖db2EntityManagerFactory
+         *
+         * @param db2EntityManagerFactory
+         * @return
+         */
+        @Bean(name = "db2TransactionManager")
+        public PlatformTransactionManager transactionManager(@Qualifier("db2EntityManagerFactory") EntityManagerFactory db2EntityManagerFactory) {
+            return new JpaTransactionManager(db2EntityManagerFactory);
+        }
+    }
+    ```
+
+  * **第四步：通过 application.properties 配置两个数据源的值，代码如下：**
+
+    ```
+    ###########datasource1 采用Mysql数据库
+    spring.datasource1.url=jdbc:mysql://localhost:3306/test2?logger=Slf4JLogger&profileSQL=true
+    spring.datasource1.username=root
+    spring.datasource1.password=root
+    ##数据源1的连接池的名字
+    spring.datasource.hikari.db1.pool-name=jpa-hikari-pool-db1
+    ##最长生命周期15分钟够了
+    spring.datasource.hikari.db1.maxLifetime=900000
+    spring.datasource.hikari.db1.maximumPoolSize=8
+    ###########datasource2 采用h2内存数据库
+    spring.datasource2.url=jdbc:h2:~/test
+    spring.datasource2.username=sa
+    spring.datasource2.password=sa
+    ##数据源2的连接池的名字
+    spring.datasource.hikari.db2.pool-name=jpa-hikari-pool-db2
+    ##最长生命周期15分钟够了
+    spring.datasource.hikari.db2.maxLifetime=500000
+    ##最大连接池大小和数据源1区分开，我们配置成6个
+    spring.datasource.hikari.db2.maximumPoolSize=6
+    ```
+
+* Datasource 与 TransactionManager、EntityManagerFactory 的关系分析
+
+  ```
+  HikariDataSource 负责实现 DataSource，交给 EntityManager 和 TransactionManager 使用；
+  
+  EntityManager 是利用 Datasouce 来操作数据库，而其实现类是 SessionImpl；
+  
+  EntityManagerFactory 是用来管理和生成 EntityManager 的，而 EntityManagerFactory 的实现类是 LocalContainerEntityManagerFactoryBean，通过实现 FactoryBean 接口实现，利用了 FactoryBean 的 Spring 中的 bean 管理机制，所以需要我们在 Datasource1Config 里面配置 LocalContainerEntityManagerFactoryBean 的 bean 的注入方式；
+  
+  JpaTransactionManager 是用来管理事务的，实现了 TransactionManager 并且通过 EntityFactory 和 Datasource 进行 db 操作，所以我们要在 DataSourceConfig 里面告诉 JpaTransactionManager 用的 TransactionManager 是 db1EntityManagerFactory。
+  ```
+
+* 第二种方式：利用 AbstractRoutingDataSource 配置多数据源
+
+  ```java
+  第一步：定一个数据源的枚举类，用来标示数据源有哪些。
+  /**
+   * 定义一个数据源的枚举类
+   */
+  public enum RoutingDataSourceEnum {
+     DB1, //实际工作中枚举的语义可以更加明确一点；
+     DB2;
+     public static RoutingDataSourceEnum findbyCode(String dbRouting) {
+        for (RoutingDataSourceEnum e : values()) {
+           if (e.name().equals(dbRouting)) {
+              return e;
+           }
+        }
+        return db1;//没找到的情况下，默认返回数据源1
+     }
+  }
+  第二步：新增 DataSourceRoutingHolder，用来存储当前线程需要采用的数据源。
+  /**
+   * 利用ThreadLocal来存储，当前的线程使用的数据
+   */
+  public class DataSourceRoutingHolder {
+     private static ThreadLocal<RoutingDataSourceEnum> threadLocal = new ThreadLocal<>();
+     public static void setBranchContext(RoutingDataSourceEnum dataSourceEnum) {
+        threadLocal.set(dataSourceEnum);
+     }
+     public static RoutingDataSourceEnum getBranchContext() {
+        return threadLocal.get();
+     }
+     public static void clearBranchContext() {
+        threadLocal.remove();
+     }
+  }
+  第三步：配置 RoutingDataSourceConfig，用来指定哪些 Entity 和 Repository 采用动态数据源。
+  @Configuration
+  @EnableTransactionManagement
+  @EnableJpaRepositories(
+        //数据源的repository的包路径，这里我们覆盖db1和db2的包路径
+        basePackages = {"com.example.jpa.example1"},
+        entityManagerFactoryRef = "routingEntityManagerFactory",
+        transactionManagerRef = "routingTransactionManager"
+  )
+  public class RoutingDataSourceConfig {
+     @Autowired
+     @Qualifier("db1DataSource")
+     private DataSource db1DataSource;
+     @Autowired
+     @Qualifier("db2DataSource")
+     private DataSource db2DataSource;
+     /**
+      * 创建RoutingDataSource，引用我们之前配置的db1DataSource和db2DataSource
+      *
+      * @return
+      */
+     @Bean(name = "routingDataSource")
+     public DataSource dataSource() {
+        Map<Object, Object> dataSourceMap = Maps.newHashMap();
+        dataSourceMap.put(RoutingDataSourceEnum.DB1, db1DataSource);
+        dataSourceMap.put(RoutingDataSourceEnum.DB2, db2DataSource);
+        RoutingDataSource routingDataSource = new RoutingDataSource();
+        //设置RoutingDataSource的默认数据源
+        routingDataSource.setDefaultTargetDataSource(db1DataSource);
+        //设置RoutingDataSource的数据源列表
+        routingDataSource.setTargetDataSources(dataSourceMap);
+        return routingDataSource;
+     }
+     /**
+      * 类似db1和db2的配置，唯一不同的是，这里采用routingDataSource
+      * @param builder
+      * @param routingDataSource entityManager依赖routingDataSource
+      * @return
+      */
+     @Bean(name = "routingEntityManagerFactory")
+     public LocalContainerEntityManagerFactoryBean entityManagerFactory(EntityManagerFactoryBuilder builder, @Qualifier("routingDataSource") DataSource routingDataSource) {
+        return builder.dataSource(routingDataSource).packages("com.example.jpa.example1") //数据routing的实体所在的路径，这里我们覆盖db1和db2的路径
+              .persistenceUnit("db-routing")// persistenceUnit的名字采用db-routing
+              .build();
+     }
+     /**
+      * 配置数据的事务管理者，命名为routingTransactionManager依赖routtingEntityManagerFactory
+      *
+      * @param routingEntityManagerFactory
+      * @return
+      */
+     @Bean(name = "routingTransactionManager")
+     public PlatformTransactionManager transactionManager(@Qualifier("routingEntityManagerFactory") EntityManagerFactory routingEntityManagerFactory) {
+        return new JpaTransactionManager(routingEntityManagerFactory);
+     }
+  }
+  
+  第四步：写一个 MVC 拦截器，用来指定请求分别采用什么数据源。
+  /**
+   * 动态路由的实现逻辑，我们通过请求里面的db-routing，来指定此请求采用什么数据源
+   */
+  @Component
+  public class DataSourceInterceptor extends HandlerInterceptorAdapter {
+     /**
+      * 请求处理之前更改线程里面的数据源
+      */
+     @Override
+     public boolean preHandle(HttpServletRequest request,
+                        HttpServletResponse response, Object handler) throws Exception {
+        String dbRouting = request.getHeader("db-routing");
+        DataSourceRoutingHolder.setBranchContext(RoutingDataSourceEnum.findByCode(dbRouting));
+        return super.preHandle(request, response, handler);
+     }
+     /**
+      * 请求结束之后清理线程里面的数据源
+      */
+     @Override
+     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+        super.afterCompletion(request, response, handler, ex);
+        DataSourceRoutingHolder.clearBranchContext();
+     }
+  }
+  ```
+
+*  多数据源实战注意事项
+
+  ```
+  此种方式利用了当前线程事务不变的原理，所以要注意异步线程的处理方式；
+  
+  此种方式利用了 DataSource 的原理，动态地返回不同的 db 连接，一般需要在开启事务之前使用，需要注意事务的生命周期；
+  
+  比较适合读写操作分开的业务场景；
+  
+  多数据的情况下，避免一个事务里面采用不同的数据源，这样会有意想不到的情况发生，比如死锁现象；
+  
+  学会通过日志检查我们开启请求的方法和开启的数据源是否正确，可以通过 Debug 断点来观察数据源是否选择的正确
+  ```
+
+* 微服务下的实战建议
+
+  ```
+  微服务的大环境下，服务越小，内聚越高，低耦合服务越健壮，所以一般跨库之间一定是是通过 REST 的 API 协议，进行内部服务之间的调用，这是最稳妥的方式，原因有如下几点：
+  
+  REST 的 API 协议更容易监控，更容易实现事务的原子性；
+  
+  db 之间解耦，使业务领域代码职责更清晰，更容易各自处理各种问题；
+  
+  只读和读写的 API 更容易分离和管理。
+  ```
+
+* 事务
+
+  * 事务最主要的作用是保证数据 ACID 的特性，即原子性（Atomicity）、一致性（Consistency）、隔离性（Isolation）、持久性（Durability）.
+
+    * **原子性**： 是指一个事务（Transaction）中的所有操作，要么全部完成，要么全部回滚，而不会有中间某个数据单独更新的操作。事务在执行过程中一旦发生错误，会被回滚（Rollback）到此次事务开始之前的状态，就像这个事务从来没有执行过一样。
+    * **一致性**： 是指事务操作开始之前，和操作异常回滚以后，数据库的完整性没有被破坏。数据库事务 Commit 之后，数据也是按照我们预期正确执行的。即要通过事务保证数据的正确性。
+    * **持久性**： 是指事务处理结束后，对数据的修改进行了持久化的永久保存，即便系统故障也不会丢失，其实就是保存到硬盘。
+    * **隔离性**： 是指数据库允许多个连接，同时并发多个事务，又对同一个数据进行读写和修改的能力，隔离性可以防止多个事务并发执行时，由于交叉执行而导致数据不一致的现象。而 MySQL 里面就是我们经常说的事务的四种隔离级别，即读未提交（Read Uncommitted）、读提交（Read Committed）、可重复读（Repeatable Read）和串行化（Serializable）。
+
+  * 事务的隔离级别
+
+    * **Read Uncommitted（读取未提交内容）**：此隔离级别，表示所有正在进行的事务都可以看到其他未提交事务的执行结果。不同的事务之间读取到其他事务中未提交的数据，通常这种情况也被称之为脏读（Dirty Read），会造成数据的逻辑处理错误，也就是我们在多线程里面经常说的数据不安全了。在业务开发中，几乎很少见到使用的，因为它的性能也不比其他级别要好多少。
+    * **Read Committed（读取提交内容）**： 此隔离级别是指，在一个事务相同的两次查询可能产生的结果会不一样，也就是第二次查询能读取到其他事务已经提交的最新数据。也就是我们常说的**不可重复读（Nonrepeatable Read）**的事务隔离级别。因为同一事务的其他实例在该实例处理期间，可能会对其他事务进行新的 commit，所以在同一个事务中的同一 select 上，多次执行可能返回不同结果。这是大多数数据库系统的默认隔离级别（但不是 MySQL 默认的隔离级别）。
+    * **Repeatable Read（可重读）**： 这是 MySQL 的默认事务隔离级别，它确保同一个事务多次查询相同的数据，能读到相同的数据。即使多个事务的修改已经 commit，本事务如果没有结束，永远读到的是相同数据，要注意它与Read Committed 的隔离级别的区别，是正好相反的。这会导致另一个棘手的问题：**幻读 （Phantom Read）**，即读到的数据可能不是最新的。这个是最常见的，我们举个例子来说明。
+    * **Serializable（可串行化）**：这是最高的隔离级别，它保证了每个事务是串行执行的，即强制事务排序，所有事务之间不可能产生冲突，从而解决幻读问题。如果配置在这个级别的事务，处理时间比较长，并发比较大的时候，就会导致大量的 db 连接超时现象和锁竞争，从而降低了数据处理的吞吐量。也就是这个性能比较低，所以除了某些财务系统之外，用的人不是特别多。
+
+  * MySQL 事务与连接的关系
+
+    * 事务必须在同一个连接里面的，离开连接没有事务可言；
+    * MySQL 数据库默认 autocommit=1，即每一条 SQL 执行完自动提交事务；
+    * 数据库里面的每一条 SQL 执行的时候必须有事务环境；
+    * MySQL 创建连接的时候默认开启事务，关闭连接的时候如果存在事务没有 commit 的情况，则自动执行 rollback 操作；
+    * 不同的 connect 之间的事务是相互隔离的。
+
+  * MySQL 事务的两种操作方式
+
+    * 第一种：用 BEGIN、ROLLBACK、COMMIT 来实现。
+      * BEGIN开始一个事务
+      * ROLLBACK事务回滚
+      * COMMIT事务确认
+    * 第二种：直接用 SET 来改变 MySQL 的自动提交模式。
+      * SET AUTOCOMMIT=0禁止自动提交
+      * SET AUTOCOMMIT=1开启自动提交
+
+  * MySQL 数据库的最大连接数
+
+    * `show variables like 'max_connections' `查看此数据库的最大连接数、通过 `show global status like 'Max_used_connections'` 查看正在使用的连接数，还可以通过 `set global max_connections=1500` 来设置数据库的最大连接数。
+    * 默认连接超时时间8小时;
+
+  * Spring里面事务的配置方法
+
+    * Spring Boot会通过 TransactionAutoConfiguration.java 加载 @EnableTransactionManagement 注解帮我们默认开启事务;
+
+    * 默认 @Transactional 注解式事务
+
+      ```java
+      @Target({ElementType.METHOD, ElementType.TYPE})
+      @Retention(RetentionPolicy.RUNTIME)
+      @Inherited
+      @Documented
+      public @interface Transactional {
+         @AliasFor("transactionManager")
+         String value() default "";
+         @AliasFor("value")
+         String transactionManager() default "";
+         Propagation propagation() default Propagation.REQUIRED;
+         Isolation isolation() default Isolation.DEFAULT;
+         int timeout() default TransactionDefinition.TIMEOUT_DEFAULT;
+         boolean readOnly() default false;
+         Class<? extends Throwable>[] rollbackFor() default {};
+         String[] rollbackForClassName() default {};
+         Class<? extends Throwable>[] noRollbackFor() default {};
+         String[] noRollbackForClassName() default {};
+      }
+      ```
+
+      ![图片1.png](https://s0.lgstatic.com/i/image/M00/6E/36/Ciqc1F-yC3-AP_fhAArdN5coRWQ007.png)
+
+    * 隔离级别
+
+      * propagation：代表的是事务的传播机制，这个是 Spring 事务的核心业务逻辑，是 Spring 框架独有的，它和 MySQL 数据库没有一点关系。所谓事务的传播行为是指在同一线程中，在开始当前事务之前，需要判断一下当前线程中是否有另外一个事务存在，如果存在，提供了七个选项来指定当前事务的发生行为。我们可以看 org.springframework.transaction.annotation.Propagation 这类的枚举值来确定有哪些传播行为。7 个表示传播行为的枚举值如下所示。
+
+        ```java
+        public enum Propagation {
+        	// REQUIRED：如果当前存在事务，则加入该事务；如果当前没有事务，则创建一个新的事务。这个值是默认的。
+        	REQUIRED(0),
+        	// SUPPORTS：如果当前存在事务，则加入该事务；如果当前没有事务，则以非事务的方式继续运行。
+        	SUPPORTS(1),
+        	// MANDATORY：如果当前存在事务，则加入该事务；如果当前没有事务，则抛出异常。
+        	MANDATORY(2),
+        	// REQUIRES_NEW：创建一个新的事务，如果当前存在事务，则把当前事务挂起。
+        	REQUIRES_NEW(3),
+        	// NOT_SUPPORTED：以非事务方式运行，如果当前存在事务，则把当前事务挂起。
+        	NOT_SUPPORTED(4),
+        	// NEVER：以非事务方式运行，如果当前存在事务，则抛出异常。
+        	NEVER(5),
+        	// NESTED：如果当前存在事务，则创建一个事务作为当前事务的嵌套事务来运行；如果当前没有事务，则该取值等价于 REQUIRED。
+        	NESTED(6);
+        }
+        ```
+
+      * @Transactional 的局限性
+
+        * 一个当前对象调用对象自己里面的方法不起作用的场景
+
+          ```java
+          @Component
+          public class UserInfoServiceImpl implements UserInfoService {
+             @Autowired
+             private UserInfoRepository userInfoRepository;
+             /**
+              * 根据UserId产生的一些业务计算逻辑
+              */
+             @Override
+             @Transactional(transactionManager = "db2TransactionManager")
+             public UserInfo calculate(Long userId) {
+                UserInfo userInfo = userInfoRepository.findById(userId).get();
+                userInfo.setAges(userInfo.getAges()+1);
+                //.....等等一些复杂事务内的操作
+                userInfo.setTelephone(Instant.now().toString());
+                return userInfoRepository.saveAndFlush(userInfo);
+             }
+             /**
+              * 此方法调用自身对象的方法，就会发现calculate方法上面的事务是失效的
+              */
+             public UserInfo save(Long userId) {
+                return this.calculate(userId);
+             }
+          }
+          ```
+
+        * 解决方法: 可以引入一个类 TransactionTemplate
+
+          ```java
+          public UserInfo save(Long userId) {
+             return transactionTemplate.execute(status -> this.calculate(userId));
+          }
+          ```
+
+        * 自定义 TransactionHelper
+
+          ```java
+          第一步：新建一个 TransactionHelper 类，进行事务管理，代码如下。
+          /**
+           * 利用spring进行管理
+           */
+          @Component
+          public class TransactionHelper {
+              /**
+               * 利用spring 的机制和jdk8的function机制实现事务
+               */
+              @Transactional(rollbackFor = Exception.class) //可以根据实际业务情况，指定明确的回滚异常
+              public <T, R> R transactional(Function<T, R> function, T t) {
+                  return function.apply(t);
+              }
+          }
+          第二步：直接在 service 中就可以使用了，代码如下。
+          @Autowired
+          private TransactionHelper transactionHelper;
+          /**
+          * 调用外部的transactionHelper类，利用transactionHelper方法上面的@Transaction注解使事务生效
+          */
+          public UserInfo save(Long userId) {
+             return transactionHelper.transactional((uid)->this.calculate(uid),userId);
+          }
+          ```
+
+      * 隐式事务 / AspectJ 事务配置
+
+        ```java
+        @Configuration
+        @EnableTransactionManagement
+        public class AspectjTransactionConfig {
+           public static final String transactionExecution = "execution (* com.example..service.*.*(..))";//指定拦截器作用的包路径
+           @Autowired
+           private PlatformTransactionManager transactionManager;
+           @Bean
+           public DefaultPointcutAdvisor defaultPointcutAdvisor() {
+              //指定一般要拦截哪些类
+              AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();
+              pointcut.setExpression(transactionExecution);
+              //配置advisor
+              DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor();
+              advisor.setPointcut(pointcut);
+              //根据正则表达式，指定上面的包路径里面的方法的事务策略
+              Properties attributes = new Properties();
+              attributes.setProperty("get*", "PROPAGATION_REQUIRED,-Exception");
+              attributes.setProperty("add*", "PROPAGATION_REQUIRED,-Exception");
+              attributes.setProperty("save*", "PROPAGATION_REQUIRED,-Exception");
+              attributes.setProperty("update*", "PROPAGATION_REQUIRED,-Exception");
+              attributes.setProperty("delete*", "PROPAGATION_REQUIRED,-Exception");
+              //创建Interceptor
+              TransactionInterceptor txAdvice = new TransactionInterceptor(transactionManager, attributes);
+              advisor.setAdvice(txAdvice);
+              return advisor;
+           }
+        }
+        ```
+
+      * 通过日志分析配置方法的过程
+
+        * 第一步，在数据连接中加上 logger=Slf4JLogger&profileSQL=true，用来显示 MySQL 执行的 SQL 日志
+
+        * 第二步，打开 Spring 的事务处理日志，用来观察事务的执行过程.
+
+          ```
+          # Log Transactions Details
+          logging.level.org.springframework.orm.jpa=DEBUG
+          logging.level.org.springframework.transaction=TRACE
+          logging.level.org.hibernate.engine.transaction.internal.TransactionImpl=DEBUG
+          # 监控连接的情况
+          logging.level.org.hibernate.resource.jdbc=trace
+          logging.level.com.zaxxer.hikari=DEBUG
+          ```
+
+        * 第三步，执行一个 saveOrUpdate 的操作，详细的执行日志
 
 ### 3. 原理
 
-### 4. 扩展
+* JpaProperties 属性
+
+  ```
+  # 可以配置JPA的实现者的原始属性的配置，如：这里我们用的JPA的实现者是hibernate
+  # 那么hibernate里面的一些属性设置就可以通过如下方式实现，具体properties里面有哪些，本讲会详细介绍，我们先知道这里可以设置即可
+  spring.jpa.properties.hibernate.hbm2ddl.auto=none
+  #hibernate的persistence.xml文件有哪些，目前已经不推荐使用
+  #spring.jpa.mapping-resources=
+  # 指定数据源的类型，如果不指定，Spring Boot加载Datasource的时候会根据URL的协议自己判断
+  # 如：spring.datasource.url=jdbc:mysql://localhost:3306/test 上面可以明确知道是mysql数据源，所以这个可以不需要指定；
+  # 应用场景，当我们通过代理的方式，可能通过datasource.url没办法判断数据源类型的时候，可以通过如下方式指定，可选的值有：DB2,H2,HSQL,INFORMIX,MYSQL,ORACLE,POSTGRESQL,SQL_SERVER,SYBASE)
+  spring.jpa.database=mysql
+  # 是否在启动阶段根据实体初始化数据库的schema，默认false，当我们用内存数据库做测试的时候可以打开，很有用
+  spring.jpa.generate-ddl=false
+  # 和spring.jpa.database用法差不多，指定数据库的平台，默认会自己发现；一般不需要指定，database-platform指定的必须是org.hibernate.dialect.Dialect的子类，如mysql默认是用下面的platform
+  spring.jpa.database-platform=org.hibernate.dialect.MySQLInnoDBDialect
+  # 是否在view层打开session，默认是true，其实大部分场景不需要打开，我们可以设置成false，
+  # 22课时我们再详细讲解
+  spring.jpa.open-in-view=false
+  # 是否显示sql，当执行JPA的数据库操作的时候，默认是false，在本地开发的时候我们可以把这个打开，有助于分析sql是不是我们预期的
+  # 在生产环境的时候建议给这个设置成false，改由logging.level.org.hibernate.SQL=DEBUG代替，这样的话日志默认是基于logback输出的
+  # 而不是直接打印到控制台的，有利于增加traceid和线程ID等信息，便于分析
+  spring.jpa.show-sql=true
+  ```
+
+* Debug 时候，日志的配置
+
+  ```
+  ### 日志级别的灵活运用
+  ## hibernate相关
+  # 显示sql的执行日志，如果开了这个,show_sql就可以不用了
+  logging.level.org.hibernate.SQL=debug
+  # hibernate id的生成日志
+  logging.level.org.hibernate.id=debug
+  # hibernate所有的操作都是PreparedStatement，把sql的执行参数显示出来
+  logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
+  # sql执行完提取的返回值
+  logging.level.org.hibernate.type.descriptor.sql=trace
+  # 请求参数
+  logging.level.org.hibernate.type=debug
+  # 缓存相关
+  logging.level.org.hibernate.cache=debug
+  # 统计hibernate的执行状态
+  logging.level.org.hibernate.stat=debug
+  # 查看所有的缓存操作
+  logging.level.org.hibernate.event.internal=trace
+  logging.level.org.springframework.cache=trace
+  # hibernate 的监控指标日志
+  logging.level.org.hibernate.engine.internal.StatisticalLoggingSessionEventListener=DEBUG
+  ### 连接池的相关日志
+  ## hikari连接池的状态日志，以及连接池是否完好 #连接池的日志效果：HikariCPPool - Pool stats (total=20, active=0, idle=20, waiting=0)
+  logging.level.com.zaxxer.hikari=TRACE
+  #开启 debug可以看到 AvailableSettings里面的默认配置的值都有哪些，会输出类似下面的日志格式
+  # org.hibernate.cfg.Settings               : Statistics: enabled
+  # org.hibernate.cfg.Settings               : Default batch fetch size: -1
+  logging.level.org.hibernate.cfg=debug
+  #hikari数据的配置项日志
+  logging.level.com.zaxxer.hikari.HikariConfig=TRACE
+  ### 查看事务相关的日志，事务获取，释放日志
+  logging.level.org.springframework.orm.jpa=DEBUG
+  logging.level.org.springframework.transaction=TRACE
+  logging.level.org.hibernate.engine.transaction.internal.TransactionImpl=DEBUG
+  ### 分析connect 以及 orm和 data的处理过程更全的日志
+  logging.level.org.springframework.data=trace
+  logging.level.org.springframework.orm=trace
+  
+  当我们分析一个问题的时候，如果不知道日志具体在哪个类里面，通过设置 logging.level.root=trace 的话，日志又非常多几乎没有办法看，那么我们可以缩小范围，不如说我们分析的是 hikari 包里面相关的问题。
+  我们可以把整个日志级别 logging.level.root=info 设置成 info，把其他所有的日志都关闭，并把 logging.level.com.zaxxer=trace 设置成最大的，保持日志不受干扰，然后观察日志再逐渐减少查看范围
+  ```
+
+* @PersistenceUnit  @PersistenceContext
+
+  >EntityManagerFactory 和 Persistence Unit 是什么？
+  >按照 JPA 协议里面的定义：persistence unit 是一些持久化配置的集合，里面包含了数据源的配置、EntityManagerFactory 的配置，spring 3.1 之前主要是通过 persistence.xml 的方式来配置一个 persistence unit。
+  >
+  >
+  >
+  >EntityManager 和 PersistenceContext 是什么？
+  >按照 JPA 协议的规范，我们先理解一下 PersistenceContext，它是用来管理会话里面的 Entity 状态的一个上下文环境，使 Entity 的实例有了不同的状态，也就是我们所说的实体实例的生命周期。
+  >
+  >而这些实体在 PersistenceContext 中的不同状态都是通过 EntityManager 提供的一些方法进行管理的，也就是说：
+  >
+  >PersistenceContext 是持久化上下文，是 JPA 协议定义的，而 Hibernate 的实现是通过 Session 创建和销毁的，也就是说一个 Session 有且仅有一个 PersistenceContext；
+  >
+  >PersistenceContext 既然是持久化上下文，里面管理的是 Entity 的状态；
+  >
+  >EntityManager 是通过 PersistenceContext 创建的，用来管理 PersistenceContext 中 Entity 状态的方法，离开 PersistenceContext 持久化上下文，EntityManager 没有意义；
+  >
+  >EntityManger 是操作对象的唯一入口，一个请求里面可能会有多个 EntityManger 对象。
+
+* 实体对象的生命周期
+
+  > 既然 PersistenceContext 是存储 Entity 的，那么 Entity 在 PersistenceContext 里面肯定有不同的状态。对此，JPA 协议定义了四种状态：new、manager、detached、removed。
+  >
+  > ![Drawing 0.png](https://s0.lgstatic.com/i/image/M00/70/03/CgqCHl-3m3OAPiQmAAB8FdvAFnE298.png)
+  >
+  > 第一种：New 状态的对象
+  >
+  > 当我们使用关键字 new 的时候创建的实体对象，称为 new 状态的 Entity 对象。它需要同时满足两个条件：new 状态的实体 Id 和 Version 字段都是 null；new 状态的实体没有在 PersistenceContext 中出现过。
+  >
+  > 那么如果我们要把 new 状态的 Entity 放到 PersistenceContext 里面，有两种方法：执行 entityManager.persist(entity) 方法；通过关联关系的实体关系配置 cascade=PERSIST or cascade=ALL 这种类型，并且关联关系的一方，也执行了 entityManager.persist(entity) 方法。
+  >
+  > 
+  >
+  > 第二种：Detached（游离）的实体对象
+  >
+  > Detached 状态的对象表示和 PersistenceContext 脱离关系的 Entity 对象。它和 new 状态的对象的不同点在于：
+  >
+  > * Detached 是 new 状态的实体对象没有持久化 ID（即没有 ID 和 version）；
+  >
+  > * 变成持久化对象需要进行 merger 操作，merger 操作会 copy 一个新的实体对象，然后把新的实体对象变成 Manager 状态。  
+  >
+  > 而 Detached 和 new 状态的对象相同点也有两个方面：
+  >
+  > * 都和 PersistenceContext 脱离了关系； 
+  >
+  > * 当执行 flush 操作或者 commit 操作的时候，不会进行数据库同步。
+  >
+  >   
+  >
+  > 第三种：Manager（persist） 状态的实体
+  >
+  > Manager 状态的实体，顾名思义，是指在 PersistenceContext 里面管理的实体，而此种状态的实体当我们执行事务的 commit()，或者 entityManager 的 flush 方法的时候，就会进行数据库的同步操作。可以说是和数据库的数据有映射关系。
+  >
+  > 
+  >
+  > 第四种：Removed 的实体状态
+  >
+  > Removed 的状态，顾名思义就是指删除了的实体，但是此实体还在 PersistenceContext 里面，只是在其中表示为 Removed 的状态，它和 Detached 状态的实体最主要的区别就是不在 PersistenceContext 里面，但都有 ID 属性。
+
+* MyBatis 是对数据库的操作所见即所得的模式；而使用 JPA，你的任何操作都不会产生 DB 的sql。
+
+* Flush 的作用
+
+  * flush 重要的、唯一的作用，就是将 Persistence Context 中变化的实体转化成 sql 语句，同步执行到数据库里面。换句话来说，如果我们不执行 flush() 方法的话，通过 EntityManager 操作的任何 Entity 过程都不会同步到数据库里面。
+
+  * Flush 的机制是什么？
+
+    * JPA 协议规定了 EntityManager 可以通过如下方法修改 FlushMode。
+
+      ```java
+      //entity manager 里面提供的修改FlushMode的方法
+      public void setFlushMode(FlushModeType flushMode);
+      //FlushModeType只有两个值，自动和事务提交之前
+      public enum FlushModeType {
+          //事务commit之前
+         COMMIT,
+          //自动规则，默认
+         AUTO
+      }
+      而 Hiberbernate 还提供了一种手动触发的机制，可以通过如下代码的方式进行修改。
+      @PersistenceContext(properties = {@PersistenceProperty(
+              name = "org.hibernate.flushMode",
+              value = "MANUAL"//手动flush
+      )})
+      private EntityManager entityManager;
+      
+      ```
+
+    * Flush 的自动机制
+
+      * 事务 commit 之前，即指执行 transactionManager.commit() 之前都会触发，这个很好理解；
+      * 执行任何的 JPQL 或者 native SQL（代替直接操作 Entity 的方法）都会触发 flush。
+
+    * Flush 的时候会改变 SQL 的执行顺序
+
+      * flush() 方法调用之后，同一个事务内，sql 的执行顺序会变成如下模式：insert 的先执行、delete 的第二个执行、update 的第三个执行。
+      * 这种会改变顺序的现象，主要是由 persistence context 的实体状态机制导致的，所以在 Hibernate 的环境中，顺序会变成如下的 ActionQueue 的模式：
+        * `OrphanRemovalAction`
+        *  `EntityInsertAction`or`EntityIdentityInsertAction`
+        * ` EntityUpdateAction`
+        * ` CollectionRemoveAction`
+        *  `CollectionUpdateAction`
+        *  `CollectionRecreateAction`
+        *  `EntityDeleteAction`
+
+    * Flush 与事务 Commit 的关系
+
+      * 在当前的事务执行 commit 的时候，会触发 flush 方法；
+      * 在当前的事务执行完 commit 的时候，如果隔离级别是可重复读的话，flush 之后执行的 update、insert、delete 的操作，会被其他的新事务看到最新结果；
+      * 假设当前的事务是可重复读的，当我们手动执行 flush 方法之后，没有执行事务 commit 方法，那么其他事务是看不到最新值变化的，但是最新值变化对当前没有 commit 的事务是有效的；
+      * 如果执行了 flush 之后，当前事务发生了 rollback 操作，那么数据将会被回滚（数据库的机制）。
+  
+* Session、EntityManager、Connection 和 Transaction 的关系
+
+  * **Connection 和 Transaction 的关系**
+    * 事务是建立在 Connection 之上的，没有连接就没有事务。
+    * 以 MySQL InnoDB 为例，新开一个连接默认开启事务，默认每个 SQL 执行完之后自动提交事务。
+    * 一个连接里面可以有多次串行的事务段；一个事务只能属于一个 Connection。
+    * 事务与事务之间是相互隔离的，那么自然不同连接的不同事务也是隔离的。
+  * **EntityManager、Connection 和 Transaction 的关系**
+    * EntityManager 里面有 DataSource，当 EntityManager 里面开启事务的时候，先判断当前线程里面是否有数据库连接，如果有直接用。
+    * 开启事务之前先开启连接；关闭事务，不一定关闭连接。
+    * 开启 EntityManager，不一定立马获得连接；获得连接，不一定立马开启事务。
+    * 关闭 EntityManager，一定关闭事务，释放连接；反之不然。
+  * **Session、EntityManager、Connection 和 Transaction 的关系**
+    * Session 是 EntityManager 的子类，SessionImpl 是 Session 和 EntityManager 的实现类。那么自然 EntityManager 和 Connection、Transaction 的关系同样适用 Session、EntityManager、Connection 和 Transaction 的关系。
+    * Session 的生命周期决定了 EntityManager 的生命周期。
+  * **Session 和 Transaction 的关系**
+    * 在 Hibernate 的 JPA 实现里面，开启 Transaction 之前，必须要先开启 Session。
+    * 默认情况下，Session 的生命周期由 open-in-view 决定是请求之前开启，还是事务之前开启。
+    * 事务关闭了，Session 不一定关闭。
+    * Session 关闭了，事务一定关闭。
+  
+* **N+1SQL问题**
+
+  ```java
+  //UserInfo实体对象如下：
+  @Entity
+  @Data
+  @SuperBuilder
+  @AllArgsConstructor
+  @NoArgsConstructor
+  @Table
+  @ToString(exclude = "addressList")//exclued防止 toString打印日志的时候死循环
+  public class UserInfo extends BaseEntity {
+     private String name;
+     private String telephone;
+     // UserInfo实体对象的关联关系由Address对象里面的userInfo字段维护，默认是lazy加载模式，为了方便演示fetch取EAGER模式。此处是一对多关联关系
+     @OneToMany(mappedBy = "userInfo",fetch = FetchType.EAGER)
+     private List<Address> addressList;
+  }
+  //Address对象如下：
+  @Entity
+  @Table
+  @Data
+  @SuperBuilder
+  @AllArgsConstructor
+  @NoArgsConstructor
+  @ToString(exclude = "userInfo")
+  public class Address extends BaseEntity {
+     private String city;
+     //维护UserInfo和Address的外键关系，方便演示也采用EAGER模式；
+     @ManyToOne(fetch = FetchType.EAGER)
+     @JsonBackReference //此注解防止JSON死循环
+     private UserInfo userInfo;
+  }
+  所谓的 N+1 的 SQL，此时 1 代表的是一条 SQL 查询 UserInfo 信息；N 条 SQL 查询 Address 的信息。
+  ```
+
+  * 解决方法一:
+
+    * hibernate.default_batch_fetch_size 配置
+
+    * hibernate.default_batch_fetch_size 配置在 AvailableSettings.class 里面，指的是批量获取数据的大小，默认是 -1，表示默认没有匹配取数据。
+
+      ```
+      # 更改批量取数据的大小为20
+      spring.jpa.properties.hibernate.default_batch_fetch_size= 20
+      
+      在实际工作中，一定要知道我们一次操作会产生多少 SQL，有没有预期之外的 SQL 参数，这是需要关注的重点，这种情况可以利用我们之前说过的如下配置来开启打印 SQL
+      ## 显示sql的执行日志，如果开了这个,show_sql就可以不用了，show_sql没有上下文，多线程情况下，分不清楚是谁打印的，所有我推荐如下配置项：
+      logging.level.org.hibernate.SQL=debug
+      ```
+
+    * 但是这种配置也有个缺陷，就是只能全局配置，没办法针对不通过的实体管理关系配置不同的 Fetch Size 的值。
+
+  * 解决方法二:
+
+    * @BatchSize 注解是 Hibernate 提供的用来解决查询关联关系的批量处理大小，默认无，可以配置在实体上，也可以配置在关联关系上面。此注解里面只有一个属性 size，用来指定关联关系 LAZY 或者是 EAGER 一次性取数据的大小。
+
+    * @BatchSize 只能作用在 @ManyToMany、@OneToMany、实体类这三个地方。
+
+      ```java
+      @Entity
+      @Data
+      @SuperBuilder
+      @AllArgsConstructor
+      @NoArgsConstructor
+      @Table
+      @ToString(exclude = "addressList")
+      @BatchSize(size = 2)//实体类上加@BatchSize注解，用来设置当被关联关系的时候一次查询的大小，我们设置成2，方便演示Address关联UserInfo的时候的效果
+      public class UserInfo extends BaseEntity {
+         private String name;
+         private String telephone;
+         @OneToMany(mappedBy = "userInfo",cascade = CascadeType.PERSIST,fetch = FetchType.EAGER)
+         @BatchSize(size = 20)//关联关系的属性上加@BatchSize注解，用来设置当通过UserInfo加载Address的时候一次取数据的大小
+         private List<Address> addressList;
+      }
+      ```
+
+    * 注意事项：@BatchSize 的使用具有局限性，不能作用于 @ManyToOne 和 @OneToOne 的关联关系上，那样代码是不起作用的，如下所示。
+
+      ```java
+      public class Address extends BaseEntity {
+         private String city;
+         @ManyToOne(cascade = CascadeType.PERSIST,fetch = FetchType.EAGER)
+         @BatchSize(size = 30) //由于是@ManyToOne的关联关系所有没有作用
+         private UserInfo userInfo;
+      }
+      ```
+
+  * 解决方法三:
+
+    * Hibernate 中还提供了一种 FetchMode 的策略，包含三种模式，分别为 FetchMode.SELECT、FetchMode.JOIN，以及 FetchMode.Subselect。
+
+      * Hibernate 中 @Fetch 数据的策略
+
+        ```
+        // fetch注解只能用在方法和字段上面
+        @Target({ElementType.METHOD, ElementType.FIELD})
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface Fetch {
+           //注解里面，只有一个属性获取数据的模式
+           FetchMode value();
+        }
+        //其中FetchMode的值有如下几种：
+        public enum FetchMode {
+           //默认模式，就是会有N+1 sql的问题；
+           SELECT,
+           //通过join的模式，用一个sql把主体数据和关联关系数据一口气查出来
+           JOIN,
+           //通过子查询的模式，查询关联关系的数据
+           SUBSELECT
+        }
+        ```
+
+      * 需要注意的是，不要把这个注解和 JPA 协议里面的 FetchType.EAGER、FetchType.LAZY 搞混了，JPA 协议的关联关系中的 FetchTyp 解决的是取关联关系数据时机的问题，也就是说 EAGER 代表的是立即获得关联关系的数据，LAZY 是需要的时候再获得关联关系的数据。
+
+      * FetchMode.SELECT
+
+        ```
+        @Entity
+        @Data
+        @SuperBuilder
+        @AllArgsConstructor
+        @NoArgsConstructor
+        @Table
+        @ToString(exclude = "addressList")
+        public class UserInfo extends BaseEntity {
+           private String name;
+           private String telephone;
+           @OneToMany(mappedBy = "userInfo",cascade = CascadeType.PERSIST,fetch = FetchType.EAGER)
+           @Fetch(value = FetchMode.SELECT)
+           private List<Address> addressList;
+        }
+        ```
+
+      * FetchMode.JOIN
+
+        ```
+        public class UserInfo extends BaseEntity {
+           private String name;
+           private String telephone;
+           @OneToMany(mappedBy = "userInfo",cascade = CascadeType.PERSIST,fetch = FetchType.EAGER)
+           @Fetch(value = FetchMode.JOIN) //唯一变化的地方采用JOIN模式
+           private List<Address> addressList;
+        }
+        ```
+
+      * FetchMode.SUBSELECT
+
+        ```
+        public class UserInfo extends BaseEntity {
+           @OneToMany(mappedBy = "userInfo",cascade = CascadeType.PERSIST,fetch = FetchType.LAZY) //我们这里测试一下LAZY情况
+           @Fetch(value = FetchMode.SUBSELECT) //唯一变化之处
+           private List<Address> addressList;
+        }
+        ```
+
+      * FetchMode.SUBSELECT 支持 ID 查询和各种条件查询，唯一的缺点是只能配置在 @OneToMany 和 @ManyToMany 的关联关系上，不能配置在 @ManyToOne 和 @OneToOne 的关联关系上
+
+      * @Fetch 的不同模型，都有各自的优缺点：FetchMode.SELECT 默认，和不配置的效果一样；FetchMode.JOIN 只支持类似 findById(id) 的方法，只能根据 ID 查询才有效果；FetchMode.SUBSELECT 虽然不限使用方式，但是只支持 **ToMany 的关联关系。
+
+  * 解决方法四:
+
+    * JPA 协议企图通过 @NamedEntityGraph 注解来描述实体之间的关联关系，当被 @EntityGraph 使用的时候进行 EAGER 加载，以减少 N+1 的 SQL
+
+    * @NamedEntityGraph 和 @EntityGraph 用法
+
+      ```java
+      //可以被@NamedEntityGraphs注解重复使用，只能配置在类上面，用来声明不同的EntityGraph；
+      @Repeatable(NamedEntityGraphs.class)
+      @Target({TYPE})
+      @Retention(RUNTIME)
+      public @interface NamedEntityGraph {
+          //指定一个名字
+          String name() default "";
+          //哪些关联关系属性可以被EntityGraph包含进去，默认一个没有。可以配置多个
+          NamedAttributeNode[] attributeNodes() default {};
+      
+          //是否所有的关联关系属性自动包含在内，默认false;
+          boolean includeAllAttributes() default false;
+      
+          //配置subgraphs，子实体图(可以理解为关联关系实体图，即如果算层级，可以配置第二层级)，可以被NamedAttributeNode引用
+          NamedSubgraph[] subgraphs() default {};
+          //配置subclassSubgraphs的namedSubgraph有哪些。即如果算层级，可以配置第三层级
+          NamedSubgraph[] subclassSubgraphs() default {};
+      }
+      
+      // @NamedEntityGraphs 能够配置多个 @NamedEntityGraph 只能使用在实体类上面
+      @Target({TYPE})
+      @Retention(RUNTIME)
+      public @interface NamedEntityGraphs{
+          NamedEntityGraph[] value();//可以同时指定多个NamedEntityGraph
+      }
+      
+      // 用来进行属性节点的描述
+      @Target({})
+      @Retention(RUNTIME)
+      public @interface NamedAttributeNode {
+          //要包含的关联关系的属性的名字，必填
+          String value();
+          //如果我们在@NamedEntityGraph里面配置了子关联关系，这个是配置subgraph的名字
+          String subgraph() default "";
+         //当关联关系是被Map结构引用的时候，我们可以指定key的方式，一般很少用
+          String keySubgraph() default "";
+      }
+      
+      @Target({})
+      @Retention(RUNTIME)
+      public @interface NamedSubgraph {
+          //指定一个名字
+          String name();
+          //子关联关系的类的class
+          Class type() default void.class;
+          //二层关联关系的要包含的关联关系的属性的名字
+          NamedAttributeNode[] attributeNodes();
+      }
+      
+      @Retention(RetentionPolicy.RUNTIME)
+      @Target({ ElementType.METHOD, ElementType.ANNOTATION_TYPE })
+      //EntityGraph 作用在Repository的接口里面的方法上面
+      public @interface EntityGraph {
+         //指@EntityGraph注解引用的@NamedEntityGraph里面定义的name，如果是空EntityGraph就不会起作用，如果为空相当于没有配置；
+         String value() default "";
+         //EntityGraph的类型，默认是EntityGraphType.FETCH类型，我们接着往下看EntityGraphType一共有几个值
+         EntityGraphType type() default EntityGraphType.FETCH;
+          //可以指定attributePaths用来覆盖@NamedEntityGraph里面的attributeNodes的配置，默认配置是空，以@NamedEntityGraph里面的为准；
+         String[] attributePaths() default {};
+         //JPA 2.1支持的EntityGraphType对应的枚举值
+         public enum EntityGraphType {
+            //LOAD模式，当被指定了这种模式、被@EntityGraph管理的attributes的时候，原来的FetchType的类型直接忽略变成Eager模式，而不被@EntityGraph管理的attributes还是保持默认的FetchType
+            LOAD("javax.persistence.loadgraph"),
+            //FETCH模式，当被指定了这种模式、被@EntityGraph管理的attributes的时候，原来的FetchType的类型直接忽略变成Eager模式，而不被@EntityGraph管理的attributes将会变成Lazy模式，和LOAD的区别就是对不被@NamedEntityGraph配置的关联关系的属性的FetchType不一样；
+            FETCH("javax.persistence.fetchgraph");
+            private final String key;
+            private EntityGraphType(String value) {
+               this.key = value;
+            }
+            public String getKey() {
+               return key;
+            }
+         }
+      }
+      ```
+
+    * @EntityGraph 使用实例
+
+      ```java
+      第一步：在实体里面配置 @EntityGraph
+      @Entity
+      @Table
+      @Data
+      @SuperBuilder
+      @AllArgsConstructor
+      @NoArgsConstructor
+      @ToString(exclude = "userInfo")
+      //这里我们直接使用@NamedEntityGraph，因为只需要配置一个@NamedEntityGraph，我们指定一个名字getAllUserInfo，指定被这个名字的实体试图关联的关联关系属性是userInfo
+      @NamedEntityGraph(name = "getAllUserInfo",attributeNodes = @NamedAttributeNode(value = "userInfo"))
+      public class Address extends BaseEntity {
+         private String city;
+         @JsonBackReference //防止JSON死循环
+         @ManyToOne(cascade = CascadeType.PERSIST,fetch = FetchType.LAZY)//采用默认的lazy模式
+         private UserInfo userInfo;
+      }
+      @Entity
+      @Data
+      @SuperBuilder
+      @AllArgsConstructor
+      @NoArgsConstructor
+      @Table
+      @ToString(exclude = "addressList")
+      //UserInfo对应的关联关系，我们利用@NamedEntityGraphs配置了两个，一个是针对Address的关联关系，一个是name叫rooms的实体图包含了rooms属性；我们在UserInfo里面增加了两个关联关系；
+      @NamedEntityGraphs(value = {@NamedEntityGraph(name = "addressGraph",attributeNodes = @NamedAttributeNode(value = "addressList")),@NamedEntityGraph(name = "rooms",attributeNodes = @NamedAttributeNode(value = "rooms"))})
+      public class UserInfo extends BaseEntity {
+         private String name;
+         private String telephone;
+         private Integer ages;
+         //默认LAZY模式
+         @OneToMany(mappedBy = "userInfo",cascade = CascadeType.PERSIST,fetch = FetchType.LAZY)
+         private List<Address> addressList;
+         //默认EAGER模式
+         @OneToMany(cascade = CascadeType.PERSIST,fetch = FetchType.EAGER)
+         private List<Room> rooms;
+      }
+      
+      第二步：在我们需要的 Repository 的方法上面直接使用 @EntityGraph
+      //因为要用findAll()做测试，所以可以覆盖JpaRepository里面的findAll()方法，加上@EntityGraph注解
+      public interface UserInfoRepository extends JpaRepository<UserInfo, Long>{
+         @Override
+         //我们指定EntityGraph引用的是，在UserInfo实例里面配置的name=addressGraph的NamedEntityGraph；
+         // 这里采用的是LOAD的类型，也就是说被addressGraph配置的实体图属性address采用的fetch会变成 FetchType.EAGER模式，而没有被addressGraph实体图配置关联关系属性room还是采用默认的EAGER模式
+      @EntityGraph(value = "addressGraph",type = EntityGraph.EntityGraphType.LOAD)
+         List<UserInfo> findAll();
+      }}
+      
+      public interface AddressRepository extends JpaRepository<Address, Long>{
+      @Override //可以覆盖原始方法，添加上不同的@EntityGraph策略
+      //使用@EntityGraph查询所有Address的时候，指定name = "getAllUserInfo"的@NamedEntityGraph，采用默认的EntityGraphType.FETCH，如果Address里面有多个关联关系的时候，只有在name = "getAllUserInfo"的实体图配置的userInfo属性上采用Eager模式，其他关联关系属性没有指定，默认采用LAZY模式；
+      @EntityGraph(value = "getAllUserInfo")
+      List<Address> findAll();
+      }
+      ```
+
+* JPA  @Query 中SpEL的应用场景
+
+  * 通过 SpEL 取被 @Query 注解的方法参数
+
+    ```java
+    //用法一：根据下标取方法里面的参数
+    @Query("select u from User u where u.age = ?#{[0]}") 
+    List<User> findUsersByAge(int age);
+    //用法二：#customer取@Param("customer")里面的参数
+    @Query("select u from User u where u.firstname = :#{#customer.firstname}")
+    List<User> findUsersByCustomersFirstname(@Param("customer") Customer customer);
+    //用法三：用JPA约定的变量entityName取得当前实体的实体名字
+    @Query("from #{#entityName}")
+    List<UserInfo> findAllByEntityName();
+    
+    public interface UserInfoRepository extends JpaRepository<UserInfo, Long> {
+       // JPA约定的变量entityName取得当前实体的实体名字
+       @Query("from #{#entityName}")
+       List<UserInfo> findAllByEntityName();
+       
+       //一个查询中既可以支持SpEL也可以支持普通的:ParamName的方式
+       @Modifying
+       @Query("update #{#entityName} u set u.name = :name where u.id =:id")
+       void updateUserActiveState(@Param("name") String name, @Param("id") Long id);
+       
+       //演示SpEL根据数组下标取参数，和根据普通的Parma的名字:name取参数
+       @Query("select u from UserInfo u where u.lastName like %:#{[0]} and u.name like %:name%")
+       List<UserInfo> findContainingEscaped(@Param("name") String name);
+       
+       //SpEL取Parma的名字customer里面的属性
+       @Query("select u from UserInfo u where u.name = :#{#customer.name}")
+       List<UserInfo> findUsersByCustomersFirstname(@Param("customer") UserInfo customer);
+       
+       //利用SpEL根据一个写死的'jack'字符串作为参数
+       @Query("select u from UserInfo u where u.name = ?#{'jack'}")
+       List<UserInfo> findOliverBySpELExpressionWithoutArgumentsWithQuestionmark();
+       
+       //同时SpEL支持特殊函数escape和escapeCharacter
+       @Query("select u from UserInfo u where u.lastName like %?#{escape([0])}% escape ?#{escapeCharacter()}")
+       List<UserInfo> findByNameWithSpelExpression(String name);
+       
+       // #entityName和#[]同时使用
+       @Query("select u from #{#entityName} u where u.name = ?#{[0]} and u.lastName = ?#{[1]}")
+       List<UserInfo> findUsersByFirstnameForSpELExpressionWithParameterIndexOnlyWithEntityExpression(String name, String lastName);
+       //对于 native SQL同样适用，并且同样支持取pageable分页里面的属性值
+       @Query(value = "select * from (" //
+             + "select u.*, rownum() as RN from (" //
+             + "select * from user_info ORDER BY ucase(firstname)" //
+             + ") u" //
+             + ") where RN between ?#{ #pageable.offset +1 } and ?#{#pageable.offset + #pageable.pageSize}", //
+             countQuery = "select count(u.id) from user_info u", //
+             nativeQuery = true)
+       Page<UserInfo> findUsersInNativeQueryWithPagination(Pageable pageable);
+    }
+    ```
+
+* spring-security-data 在 @Query 中的用法
+
+    ```java
+    // 根据当前用户email取当前用户的信息
+    @Query("select u from UserInfo u where u.emailAddress = ?#{principal.email}")
+    List<UserInfo> findCurrentUserWithCustomQuery();
+    //如果当前用户是admin，我们就返回某业务的所有对象；如果不是admin角色，就只给当前用户的某业务数据
+    @Query("select o from BusinessObject o where o.owner.emailAddress like "+
+          "?#{hasRole('ROLE_ADMIN') ? '%' : principal.emailAddress}")
+    List<BusinessObject> findBusinessObjectsForCurrentUser();
+    ```
+
+* SpEL 在 @Cacheable 中的应用场景
+
+    ```java
+    //缓存key取当前方法名，判断一下只有返回结果不为null或者非empty才进行缓存
+    @Cacheable(value = "APP", key = "#root.methodName", cacheManager = "redis.cache", unless = "#result == null || #result.isEmpty()")
+    @Override
+    public Map<String, Map<String, String>> getAppGlobalSettings() {}
+    //evict策略的key是当前参数customer里面的name属性
+    @Caching(evict = {
+    @CacheEvict(value="directory", key="#customer.name") })
+    public String getAddress(Customer customer) {...}
+    //在condition里面使用，当参数里面customer的name属性的值等于字符串Tom才放到缓存里面
+    @CachePut(value="addresses", condition="#customer.name=='Tom'")
+    public String getAddress(Customer customer) {...}
+    //用在unless里面，利用SpEL的条件表达式判断，排除返回的结果地址长度小于64的请求
+    @CachePut(value="addresses", unless="#result.length()<64")
+    public String getAddress(Customer customer) {...}
+    ```
+
+    | 支持的属性    | 作用域     | 功能描述                                                     | 使用方法                             |
+    | ------------- | ---------- | ------------------------------------------------------------ | ------------------------------------ |
+    | methodName    | root 对象  | 当前被调用的方法名                                           | #root.methodName                     |
+    | method        | root 对象  | 当前被调用的方法                                             | #root.method.name                    |
+    | target        | root 对象  | 当前被调用的目标对象                                         | #root.target                         |
+    | targetClass   | root 对象  | 当前被调用的目标对象类                                       | #root.targetClass                    |
+    | args          | root 对象  | 当前被调用的方法的参数列表                                   | #root.args[0]                        |
+    | caches        | root 对象  | 当前方法调用使用的缓存列表（如@Cacheable(value={“cache1”, “cache2”})），则有两个 cache | #root.caches[0].name                 |
+    | argument name | 执行上下文 | 当前被调用的方法的参数，如 findById(Long id)，我们可以通过 #id 拿到参数 | #user.id<br/>表示参数 user 里面的 id |
+    | result        | 执行上下文 | 方法执行后的返回值（仅当方法执行之后的判断有效，如‘unless’，’cache evict’的 beforeInvocation=false） | #result                              |
+
+* 解决 In 查询条件内存泄漏的方法
+
+    * 第一种方法：修改缓存的最大条数限制
+
+        ```
+        默认 DEFAULT_QUERY_PLAN_MAX_COUNT = 2048，也就是 query plan 的最大条数限制是 2048。这样默认值可能有点大了，我们可以通过如下方式修改默认值
+        #修改 默认的plan_cache_max_size，太小会影响JPQL的执行性能，所以根据实际情况可以自由调整，不宜太小，也不宜太大，太大可能会引发内存溢出
+        spring.jpa.properties.hibernate.query.plan_cache_max_size=512
+        #修改 默认的native query的cache大小
+        spring.jpa.properties.hibernate.query.plan_parameter_metadata_max_size=128
+        ```
+
+    * 第二种方法：根据 max plan count 适当增加堆内存大小
+
+        ```
+        因为 QueryPlanMaxCount 是有限制的，那么肯定最大堆内存的使用也是有封顶限制的，我们找到临界值修改最小、最大堆内存即可。
+        ```
+
+    * 第三种方法：减少 In 的查询 SQL 生成条数
+
+        ```
+        ### 默认情况下，不同的in查询条件的个数会生成不同的plan query cache，我们开启了in_clause_parameter_padding之后会减少in生成cache的个数，会根据参数的格式运用几何的算法生成QueryCache；
+        spring.jpa.properties.hibernate.query.in_clause_parameter_padding=true
+        ```
+
+* @Cacheable
+
+    * 应用到读取数据的方法上，就是可以缓存的方法，如查找方法：先从缓存中读取，如果没有再调用方法获取数据，然后把数据添加到缓存中。
+
+        ```java
+        public @interface Cacheable {
+           @AliasFor("cacheNames")
+           String[] value() default {};
+        //cache的名字。可以根据名字设置不同cache处理类。redis里面可以根据cache名字设置不同的失效时间。
+           @AliasFor("value")
+           String[] cacheNames() default {};
+        //缓存的key的名字，支持spel
+           String key() default "";
+        //key的生成策略，不指定可以用全局的默认的。
+           String keyGenerator() default "";
+           //客户选择不同的CacheManager
+           String cacheManager() default "";
+           //配置不同的cache resolver
+           String cacheResolver() default "";
+           //满足什么样的条件才能被缓存，支持SpEL，可以去掉方法名、参数
+           String condition() default "";
+        //排除哪些返回结果不加入缓存里面去，支持SpEL，实际工作中常见的是result ==null等
+           String unless() default "";
+           //是否同步读取缓存、更新缓存
+           boolean sync() default false;
+        }
+        
+        @Cacheable(cacheNames="book", condition="#name.length() < 32", unless="#result.notNeedCache")//利用SPEL表达式只有当name参数长度小于32的时候再进行缓存，排除notNeedCache的对象
+        public Book findBook(String name)
+        ```
+
+    * @CachePut
+
+        * 调用方法时会自动把相应的数据放入缓存，它与 @Cacheable 不同的是所有注解的方法每次都会执行，一般配置在 Update 和 insert 方法上。其源码里面的字段和用法基本与 @Cacheable 相同，只是使用场景不一样.
+
+    * @CacheEvict
+
+        *  删除缓存，一般配置在删除方法上面。
+
+            ```
+            public @interface CacheEvict {
+            //与@Cacheable相同的部分咱我就不重复叙述了。
+            ......
+            	//是否删除所有的实体对象
+               boolean allEntries() default false;
+               //是否方法执行之前执行。默认在方法调用成功之后删除
+               boolean beforeInvocation() default false;
+            }
+            	@Caching 所有Cache注解的组合配置方法，源码如下：
+            	public @interface Caching {
+               Cacheable[] cacheable() default {};
+               CachePut[] put() default {};
+               CacheEvict[] evict() default {};
+            }
+            ```
+
+    * org.springframework.cache.annotation.CachingConfigurerSupport
+
+        * 通过此类可以自定义 Cache 里面的 CacheManager、CacheResolver、KeyGenerator、CacheErrorHandler，
+
+            ```
+            public class CachingConfigurerSupport implements CachingConfigurer {
+              // cache的manager，主要是管理不同的cache的实现方式，如redis还是ehcache等
+               @Override
+               @Nullable
+               public CacheManager cacheManager() {
+                  return null;
+               }
+               // cache的不同实现者的操作方法，CacheResolver解析器，用于根据实际情况来动态解析使用哪个Cache
+               @Override
+               @Nullable
+               public CacheResolver cacheResolver() {
+                  return null;
+               }
+               //cache的key的生成规则
+               @Override
+               @Nullable
+               public KeyGenerator keyGenerator() {
+                  return null;
+               }
+               //cache发生异常的回调处理，一般情况下我会打印个warn日志，方便知道发生了什么事情
+               @Override
+               @Nullable
+               public CacheErrorHandler errorHandler() {
+                  return null;
+               }
+            }
+            ```
+
+    * Spring Cache 结合 Redis 使用的最佳实践
+
+        * 不同 cache 的 name 在 redis 里面配置不同的过期时间
+
+        * 默认情况下所有 redis 的 cache 过期时间是一样的，实际工作中一般需要自定义不同 cache 的 name 的过期时间，我们这里 cache 的 name 就是指 @Cacheable 里面 value 属性对应的值。主要步骤如下。
+
+            ```java
+            第一步：自定义一个配置文件，用来指定不同的 cacheName 对应的过期时间不一样。代码如下所示。
+            @Getter
+            @Setter
+            @ConfigurationProperties(prefix = "spring.cache.redis")
+            /**
+             * 改善一下cacheName的最佳实践方法，目前主要用不同的cache name不同的过期时间，可以扩展
+             */
+            public class MyCacheProperties {
+                private HashMap<String, Duration> cacheNameConfig;
+            }
+            
+            第二步：通过自定义类 MyRedisCacheManagerBuilderCustomizer 实现 RedisCacheManagerBuilderCustomizer 里面的 customize 方法，用来指定不同的 name 采用不同的 RedisCacheConfiguration，从而达到设置不同的过期时间的效果。代码如下所示。
+            /**
+             * 这个依赖spring boot 2.2 以上版本才有效
+             */
+            public class MyRedisCacheManagerBuilderCustomizer implements RedisCacheManagerBuilderCustomizer {
+                private MyCacheProperties myCacheProperties;
+                private RedisCacheConfiguration redisCacheConfiguration;
+                public MyRedisCacheManagerBuilderCustomizer(MyCacheProperties myCacheProperties, RedisCacheConfiguration redisCacheConfiguration) {
+                    this.myCacheProperties = myCacheProperties;
+                    this.redisCacheConfiguration = redisCacheConfiguration;
+                }
+                /**
+                 * 利用默认配置的只需要在这里加就可以了
+                 * spring.cache.cache-names=abc,def,userlist2,user3
+                 * 下面是不同的cache-name可以配置不同的过期时间，yaml也支持，如果以后还有其他属性扩展可以改这里
+                 * spring.cache.redis.cache-name-config.user2=2h
+                 * spring.cache.redis.cache-name-config.def=2m
+                 * @param builder
+                 */
+                @Override
+                public void customize(RedisCacheManager.RedisCacheManagerBuilder builder) {
+                    if (ObjectUtils.isEmpty(myCacheProperties.getCacheNameConfig())) {
+                        return;
+                    }
+                    Map<String, RedisCacheConfiguration> cacheConfigurations = myCacheProperties.getCacheNameConfig().entrySet().stream()
+                            .collect(Collectors
+                                    .toMap(e->e.getKey(),v->builder
+                                            .getCacheConfigurationFor(v.getKey())
+                                            .orElse(RedisCacheConfiguration.defaultCacheConfig().serializeValuesWith(redisCacheConfiguration.getValueSerializationPair()))
+                                            .entryTtl(v.getValue())));
+                    builder.withInitialCacheConfigurations(cacheConfigurations);
+                }
+            }
+            
+            第三步：在 CacheConfiguation 里面把我们自定义的 CacheManagerCustomize 加载进去即可，代码如下。
+            
+            @EnableCaching
+            @Configuration
+            @EnableConfigurationProperties(value = {MyCacheProperties.class,CacheProperties.class})
+            @AutoConfigureAfter({CacheAutoConfiguration.class})
+            public class CacheConfiguration {
+                /**
+                 * 支持不同的cache name有不同的缓存时间的配置
+                 *
+                 * @param myCacheProperties
+                 * @param redisCacheConfiguration
+                 * @return
+                 */
+                @Bean
+                @ConditionalOnMissingBean(name = "myRedisCacheManagerBuilderCustomizer")
+                @ConditionalOnClass(RedisCacheManagerBuilderCustomizer.class)
+                public MyRedisCacheManagerBuilderCustomizer myRedisCacheManagerBuilderCustomizer(MyCacheProperties myCacheProperties, RedisCacheConfiguration redisCacheConfiguration) {
+                    return new MyRedisCacheManagerBuilderCustomizer(myCacheProperties,redisCacheConfiguration);
+                }
+            }
+            
+            第四步：使用的时候非常简单，只需要在 application.properties 里面做如下配置即可。
+            # 设置默认的过期时间是20分钟
+            spring.cache.redis.time-to-live=20m
+            # 设置我们刚才的例子 @Cacheable(value="userInfo")5分钟过期
+            spring.cache.redis.cache-name-config.userInfo=5m
+            # 设置 room的cache1小时过期
+            spring.cache.redis.cache-name-config.room=1h
+            ```
+
+    * 自定义 KeyGenerator 实现，redis 的 key 自定义拼接规则
+
+        ```java
+        @Component
+        @Log4j2
+        public class MyRedisCachingConfigurerSupport extends CachingConfigurerSupport {
+            @Override
+            public KeyGenerator keyGenerator() {
+                return getKeyGenerator();
+            }
+            /**
+             * 覆盖默认的redis key的生成规则，变成"方法名:参数:参数"
+             * @return
+             */
+            public static KeyGenerator getKeyGenerator() {
+                return (target, method, params) -> {
+                    StringBuilder key = new StringBuilder();
+                    key.append(ClassUtils.getQualifiedMethodName(method));
+                    for (Object obc : params) {
+                        key.append(":").append(obc);
+                    }
+                    return key.toString();
+                };
+            }
+            /**
+             * 覆盖默认异常处理方法，不抛异常，改打印error日志
+             *
+             * @return
+             */
+            @Override
+            public CacheErrorHandler errorHandler() {
+                return new CacheErrorHandler() {
+                    @Override
+                    public void handleCacheGetError(RuntimeException exception, Cache cache, Object key) {
+                        log.error(String.format("Spring cache GET error:cache=%s,key=%s", cache, key), exception);
+                    }
+                    @Override
+                    public void handleCachePutError(RuntimeException exception, Cache cache, Object key, Object value) {
+                        log.error(String.format("Spring cache PUT error:cache=%s,key=%s", cache, key), exception);
+                    }
+                    @Override
+                    public void handleCacheEvictError(RuntimeException exception, Cache cache, Object key) {
+                        log.error(String.format("Spring cache EVICT error:cache=%s,key=%s", cache, key), exception);
+                    }
+                    @Override
+                    public void handleCacheClearError(RuntimeException exception, Cache cache) {
+                        log.error(String.format("Spring cache CLEAR error:cache=%s", cache), exception);
+                    }
+                };
+            }
+        }    
+        ```
+
+    * 改变默认的 cache 里面 redis 的 value 序列化方式
+
+        ```java
+        @EnableCaching
+        @Configuration
+        @EnableConfigurationProperties(value = {MyCacheProperties.class,CacheProperties.class})
+        @AutoConfigureAfter({CacheAutoConfiguration.class})
+        public class CacheConfiguration {
+            /**
+             * 支持不同的cache name有不同的缓存时间的配置
+             *
+             * @param myCacheProperties
+             * @param redisCacheConfiguration
+             * @return
+             */
+            @Bean
+            @ConditionalOnMissingBean(name = "myRedisCacheManagerBuilderCustomizer")
+            @ConditionalOnClass(RedisCacheManagerBuilderCustomizer.class)
+            public MyRedisCacheManagerBuilderCustomizer myRedisCacheManagerBuilderCustomizer(MyCacheProperties myCacheProperties, RedisCacheConfiguration redisCacheConfiguration) {
+                return new MyRedisCacheManagerBuilderCustomizer(myCacheProperties,redisCacheConfiguration);
+            }
+            /**
+             * cache异常不抛异常，只打印error日志
+             *
+             * @return
+             */
+            @Bean
+            @ConditionalOnMissingBean(name = "myRedisCachingConfigurerSupport")
+            public MyRedisCachingConfigurerSupport myRedisCachingConfigurerSupport() {
+                return new MyRedisCachingConfigurerSupport();
+            }
+            /**
+             * 依赖默认的ObjectMapper，实现普通的json序列化
+             * @param defaultObjectMapper
+             * @return
+             */
+            @Bean(name = "genericJackson2JsonRedisSerializer")
+            @ConditionalOnMissingBean(name = "genericJackson2JsonRedisSerializer")
+            public GenericJackson2JsonRedisSerializer genericJackson2JsonRedisSerializer(ObjectMapper defaultObjectMapper) {
+                ObjectMapper objectMapper = defaultObjectMapper.copy();
+                objectMapper.registerModule(new Hibernate5Module().enable(REPLACE_PERSISTENT_COLLECTIONS)); //支持JPA的实体的json的序列化
+                objectMapper.configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true);//培训
+                objectMapper.deactivateDefaultTyping(); //关闭 defaultType，不需要关心reids里面是否为对象的类型
+                return new GenericJackson2JsonRedisSerializer(objectMapper);
+            }
+            /**
+             * 覆盖 RedisCacheConfiguration，只是修改serializeValues with jackson
+             *
+             * @param cacheProperties
+             * @return
+             */
+            @Bean
+            @ConditionalOnMissingBean(name = "jacksonRedisCacheConfiguration")
+            public RedisCacheConfiguration jacksonRedisCacheConfiguration(CacheProperties cacheProperties,
+                                                                          GenericJackson2JsonRedisSerializer genericJackson2JsonRedisSerializer) {
+                CacheProperties.Redis redisProperties = cacheProperties.getRedis();
+                RedisCacheConfiguration config = RedisCacheConfiguration
+                        .defaultCacheConfig();
+                config = config.serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(genericJackson2JsonRedisSerializer));//修改的关键所在，指定Jackson2JsonRedisSerializer的方式
+                if (redisProperties.getTimeToLive() != null) {
+                    config = config.entryTtl(redisProperties.getTimeToLive());
+                }
+                if (redisProperties.getKeyPrefix() != null) {
+                    config = config.prefixCacheNameWith(redisProperties.getKeyPrefix());
+                }
+                if (!redisProperties.isCacheNullValues()) {
+                    config = config.disableCachingNullValues();
+                }
+                if (!redisProperties.isUseKeyPrefix()) {
+                    config = config.disableKeyPrefix();
+                }
+                return config;
+            }
+        }
+        ```
+
+* Spring Data JPA 单元测试的最佳实践
+
+    ```java
+    第一步：引入 test 的依赖 org.springframework.boot:spring-boot-starter-test
+    
+    第二步：利用项目里面的实体和 Repository，假设我们项目里面有 Address 和 AddressRepository，代码如下所示。
+    @Entity
+    @Table
+    @Data
+    @SuperBuilder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public class Address extends BaseEntity {
+       private String city;
+       private String address;
+    }
+    //Repository的DAO层
+    public interface AddressRepository extends JpaRepository<Address, Long>{
+      
+    }
+    
+    第三步：新建 RepsitoryTest，@DataJpaTest 即可，代码如下所示。
+    @DataJpaTest
+    public class AddressRepositoryTest {
+        @Autowired
+        private AddressRepository addressRepository;
+        //测试一下保存和查询
+        @Test
+        public  void testSave() {
+            Address address = Address.builder().city("shanghai").build();
+            addressRepository.save(address);
+            List<Address> address1 = addressRepository.findAll();
+            address1.stream().forEach(address2 -> System.out.println(address2));
+        }
+    }
+    
+    Service 层单元测试
+    @ExtendWith(SpringExtension.class)//通过这个注解利用Spring的容器
+    @Import(UserInfoServiceImpl.class)//导入要测试的UserInfoServiceImpl
+    public class UserInfoServiceTest {
+        @Autowired //利用spring的容器，导入要测试的UserInfoService
+        private UserInfoService userInfoService;
+        @MockBean //里面@MockBean模拟我们service中用到的userInfoRepository，这样避免真实请求数据库
+        private UserInfoRepository userInfoRepository;
+        // 利用单元测试的思想，mock userInfoService里面的UserInfoRepository，这样Service层就不用连接数据库，就可以测试自己的业务逻辑了
+        @Test
+        public void testGetUserInfoDto() {
+    //利用Mockito模拟当调用findById(1)的时候，返回模拟数据
+                    Mockito.when(userInfoRepository.findById(1L)).thenReturn(java.util.Optional.ofNullable(UserInfo.builder().name("jack").id(1L).build()));
+            UserInfoDto userInfoDto = userInfoService.findByUserId(1L);
+            //经过一些service里面的逻辑计算，我们验证一下返回结果是否正确
+            Assertions.assertEquals("jack",userInfoDto.getName());
+        }
+    }
+    
+    Controller 层单元测试
+    @WebMvcTest(UserInfoController.class)
+    public class UserInfoControllerTest {
+        @Autowired
+        private MockMvc mvc;
+        @MockBean
+        private UserInfoService userInfoService;
+        
+        //单元测试mvc的controller的方法
+        @Test
+        public void testGetUserDto() throws Exception {
+            //利用@MockBean，当调用 userInfoService的findByUserId(1)的时候返回一个模拟的UserInfoDto数据
+            Mockito.when(userInfoService.findByUserId(1L)).thenReturn(UserInfoDto.builder().name("jack").id(1L).build());
+            
+            //利用mvc验证一下Controller里面的解决是否OK
+            MockHttpServletResponse response = mvc
+                    .perform(MockMvcRequestBuilders
+                            .get("/user/1/")//请求的path
+                            .accept(MediaType.APPLICATION_JSON)//请求的mediaType，这里面可以加上各种我们需要的Header
+                    )
+                    .andDo(print())//打印一下
+                    .andExpect(status().isOk())
+                    .andExpect(MockMvcResultMatchers.jsonPath("$.name").value("jack"))
+                    .andReturn().getResponse();
+            System.out.println(response);
+        }
+    }
+    
+    Controller 层的集成测试用例的写法
+    @SpringBootTest(classes = DemoApplication.class,
+            webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT) //加载DemoApplication，指定一个随机端口
+    public class UserInfoControllerIntegrationTest {
+        @LocalServerPort //获得模拟的随机端口
+        private int port;
+        @Autowired //我们利用RestTemplate，发送一个请求
+        private TestRestTemplate restTemplate;
+        @Test
+        public void testAllUserDtoIntegration() {
+            UserInfoDto userInfoDto = this.restTemplate
+                    .getForObject("http://localhost:" + port + "/user/1", UserInfoDto.class);//真实请求有一个后台的API
+            Assertions.assertNotNull(userInfoDto);
+        }
+    }
+    
+    ```
+
+    
+
+
 
 
 
