@@ -1,13 +1,9 @@
 package com.holelin.redis.utils;
 
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RLock;
-import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * @Description: 异步处理类
@@ -25,8 +21,7 @@ public class AsyncUtil {
 
     @Autowired
     private RedisLock redisLock;
-    @Autowired
-    RedissonClient redissonClient;
+
 
     public static final String PREFIX_PERSON = "person:";
 
@@ -41,16 +36,4 @@ public class AsyncUtil {
         log.info("任务结束");
     }
 
-    @Async
-    public void doTaskByRedissonWithError(String key) {
-        // TODO 失败
-        RLock lock = redissonClient.getLock(key);
-        try {
-            Thread.sleep(2000);
-            lock.unlock();
-        } catch (InterruptedException e) {
-            lock.unlock();
-        }
-        log.info("任务结束");
-    }
 }
