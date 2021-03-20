@@ -32,8 +32,5 @@ public class RedisLockController {
     public String startTask(@RequestParam("key") String key) {
         return redisLockService.startTask(key);
     }
-    @GetMapping("/start-by-redisson")
-    public String startTaskByRedison(@RequestParam("key") String key)  {
-        return redisLockService.startTaskByRedisson(key);
-    }
+
 }

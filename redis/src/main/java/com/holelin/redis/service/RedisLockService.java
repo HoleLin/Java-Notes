@@ -19,11 +19,6 @@ public interface RedisLockService {
      * @return
      */
     String startTask(String key);
-    /**
-     * 开始任务
-     * @param key 键
-     * @return
-     */
-    String startTaskByRedisson(String key);
+    
 
 }
