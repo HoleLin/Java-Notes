@@ -10,11 +10,11 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>org.holelin</groupId>
-    <artifactId>springboot-demos</artifactId>
+    <artifactId>java-notes</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>springboot-demos</name>
+    <name>Java-Notes</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -160,7 +160,7 @@
         <module>mysql</module>
         <module>redis</module>
         <module>sundry</module>
-        <module>jpa-demo</module>
+        <module>es</module>
     </modules>
     <build>
         <pluginManagement><!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) -->
