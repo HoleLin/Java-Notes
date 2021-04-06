@@ -160,7 +160,7 @@
         <module>mysql</module>
         <module>redis</module>
         <module>sundry</module>
-        <module>es</module>
+        <module>elasticsearch</module>
     </modules>
     <build>
         <pluginManagement><!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) -->
