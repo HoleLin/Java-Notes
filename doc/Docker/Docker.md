@@ -75,6 +75,17 @@
       *  从地址池配置一个IP地址给容器
       *  执行用户指定的应用程序
       *  执行完毕后容器被终止
+   
+*  容器管理
+
+   *  `docker cp`: 在同期和主机之间复制文件和目录
+      *  `docker cp [OPTIONS] CONTAINER:SRC_PATH DEST_PATH`
+      *  ` docker cp [OPTIONS] SRC_PATH  CONTAINER:DEST_PATH`
+   *  `docker exec` : 在容器中运行一个命令
+      *  `docker exec -it ${containerId} /bin/bash `
+   *  `docker kill ${containerId}` : 发送信号给容器中的主进程(PID 1).默认发送SIGKILL信号,会使容器立即退出.
+   *  `docker pause` 暂停容器内所有进程.进程不会接受到关于它们被暂停的任何信号,一次它们无法执行正常结束或清理的程序.进程可以通过`docker unpause`命令重启.`docker pause`的底层利用Linux的 cgroup freezer功能实现.这个命令与docker stop不同 docker stop会将所有进程停止,并对进程发送信号,让他们察觉到.
+   *  `docker restart`: 重启一个或者多个容器.
 
 ####  Docker日志文件导致磁盘满了,清理方法
 
