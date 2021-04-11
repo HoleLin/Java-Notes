@@ -585,7 +585,7 @@
 
   * **单个键管理**
 
-    * 键重命名:`rename key newkey`
+    * **键重命名**:`rename key newkey`
 
       * 为了防止被强行rename,Redis提供了renamenx命令,确保只有newKey不存在的时候才被覆盖.
 
@@ -605,12 +605,97 @@
         >
         > (error) ERR souce and destination objects are the same
 
-    * 随机返回一个键: `randomkey`
+    * **随机返回一个键**: `randomkey`
 
-    * 键过期
+    * **键过期**
 
       * `expire key seconds`: 键在seconds秒后过期
       * `expireat key timestamp`: 键在秒级时间戳timestamp后过期
+      * `ttl`和`pttl`都可以查询键的剩余过期时间,但`pttl`精度更高可以达到毫秒级别,有3种返回值:
+        * 大于等于0的整数:键剩余的过期时间(ttl是秒,pttl是毫秒);
+        * -1: 键没有设置过期时间;
+        * -2:键不存在;
+      * `expireat`命令可以设置键的秒级过期时间戳
+      * Redis2.6版本后提供毫秒级的过期方案:
+        * `pexpire key milliseconds`: 键在milliseconds毫秒后过期.
+        * `pexpireat key milliseconds-timestamp`: 键在毫秒级时间戳timestamp后过期;
+      * `persist`命令可以将键的过期时间清除;
+      * `setex`命令作为set+expire的组合,不但是原子执行,同时减少了一次网络通讯的时间;
+      * Redis不支持二级数据结构(列如哈希,列表)内部元素的过期功能,列如不能对列表类型的一个元素做过期时间设置;
+      
+    * **迁移键**
+
+      * `move key db`
+
+      * `dump key`
+
+      * `restore key ttl value`
+
+      * `dump+restore`可以实现在不同的Redis实例之间进行数据迁移的功能,整个迁移的过程分为两步:
+
+        * 在源Redis上,`dump`命令会将键值序列化,格式采用的是RDB格式.
+        * 在目标Redis上,`restore`命令将上面序列化的值进行复原,其中ttl参数代表过期时间,如果ttl=0代表没有过期时间.
+        * `dump+restore`有两点需要注意:
+          * 整个迁移过程并非与原子性的,而是通过客户端分步完成的
+          * 迁移过程是开启了两个客户端连接,所以dump的过程不是源Redis和目标Redis之间进行传输.
+
+      * `migrate host port key|""  destination-db timeout [copy] [replace] [keys key [key ...]]`
+
+        >  host: 目标Redis的IP地址
+        >
+        > port: 目标Redis的端口
+        >
+        > key|"": 在Redis3.0.6版本之前,migrate只支持迁移一个键,所以此处是要迁移的键,但在Redis3.0.6版本之后支持迁移多个键,多个当前要迁移多个键,此处为空字符串"".
+        >
+        > destination-db: 目标Redis的数据库索引,例如要迁移到0号数据库,这里就写0.
+        >
+        > timeout: 迁移的超时时间(单位为毫秒)
+        >
+        > [copy] : 如果添加此选项,迁移后并不删除源键
+        >
+        > [replace] : 如果添加此选项,migrate不管目标Redis是否存在该键都会正常迁移进行数据覆盖.
+        >
+        > [keys  key [key...]: 迁移多个键,列如要迁移key1,key2,key3,此处填写"keys key1 key2 key3"
+
+        * migrate命令就是将dump,restore,del三个命令进行组合,从而简化操作流程.
+        * migrate命令具有原子性
+        * 实现过程和dump+restore基本类似,但有3点不太相同:
+          * 整个过程是原子执行的,不需要在多个Redis实例上开启客户端,只需要在源Redis上执行migrate命令即可.
+          * migrate命令的数据传输直接在源Redis和目标Redis上完成的.
+          * 目标Redis完成restore后会发送OK给源Redis,源Redis接收后会根据migrate对应的选项来决定是否在源Redis上删除对应的键; 
+        
+      * move,dump+restore,migrate三个命令比较
+      
+        | 命令         | 作用域        | 原子性 | 支持多个键 |
+        | ------------ | ------------- | ------ | ---------- |
+        | move         | Redis实例内部 | 是     | 否         |
+        | dump+restore | Redis实例之间 | 否     | 否         |
+        | migrate      | Redis实例之间 | 是     | 是         |
+      
+    * **遍历键**
+
+      * 全量遍历键: `key pattern`
+        * *代表匹配任意字符;
+        * .代表匹配一个字符;
+        * []代表匹配部分字符,例如[1,3]代表匹配1,3,[1-10]代表匹配1到10的任意数字;
+        * \x用来做转义,例如要匹配星号,问号需要进行转义;
+      * 渐进式遍历: `scan cursor [match pattern] [count number]`
+        * cursor是必需参数,实际上cursor是一个游标,第一次遍历从0开始,每次sacn遍历完都会返回当前游标的值,直到游标为0,表示遍历结束.
+        * match pattern是可选参数,它的作用是做模式的匹配的,和keys的模式匹配很像.
+        * count number是可选参数,它的作用是表明每次要遍历的键个数,默认值是10,此参数可以适当增大.
+        * Redis从2.8版本后,提供了新的命令scan,它能有效的解决keys命令可能存在阻塞问题,每次scan命令的时间复杂度是O(1)
+
+------
 
 
+
+* **数据库管理**
+  * 切换数据库: `select dbIndex`
+  * Redis默认配置中有16个数据库;
+  * 清除数据库
+    * 清除当前数据库:`flushdb`
+    * 清除所有数据库: `flushall`
+    * 当当前数据库键值数量比较多,flushdb/flushall存在阻塞Redis的可能性;
+
+------
 
