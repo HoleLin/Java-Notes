@@ -695,7 +695,146 @@
   * 清除数据库
     * 清除当前数据库:`flushdb`
     * 清除所有数据库: `flushall`
-    * 当当前数据库键值数量比较多,flushdb/flushall存在阻塞Redis的可能性;
+    * 若当前数据库键值数量比较多,flushdb/flushall存在阻塞Redis的可能性;
 
 ------
 
+* **慢查询**
+
+  * 所谓慢查询日志就是系统在命令执行前后计算每条命令的执行时间,当超过预设阀值,就将这条命令记录下来;
+
+  * Redis客户端执行一条命令分为如下四个部分:
+
+    * 发送命令
+    * 加入命令队列
+    * **命令执行(慢查询只统计该步骤的耗时)**
+    * 返回结果
+
+  * 预设阀值: `slowlog-log-slower-than`(单位微妙,1秒=1000毫秒=1000000微妙),默认值是10000(10毫秒)
+
+    * 若 `slowlog-log-slower-than`=0,则会记录所有的命令;
+    * 若 `slowlog-log-slower-than`<0,则不会记录任何记录;
+
+  * 慢查询日志最多存储多少条: `slowlog-max-len`
+
+  * 在Redis中有两种修改配置的方法:
+
+    * 修改配置文件
+
+    * 使用`config set`命令动态修改
+
+      ```yaml
+      config set slowlog-log-slower-than 20000
+      config set slowlog-max-len 1000
+      config rewrite
+      ```
+
+  * 获取慢查询日志:`slowlog get [n]`
+
+    * n指定条数
+    * 每个慢查询日志有4个属性组成:**慢查询日志的标志id,发生时间戳,命令耗时,执行命令和参数**
+
+  * 获取慢查询日志列表当前长度:`slowlog len`
+
+  * 慢查询日志重置:`slowlog reset`
+
+* **redis-cli**
+
+  * -r(repeat):代表命令将执行多次;
+    * `redis-cli -r 3 ping`
+  * -i(interval):代表每个几秒执行一次命令,但是-i选项必须和-r选项一起使用,**单位是秒,不支持毫秒为单位**;
+  * -x:代表从标准输入(stdin)读取数据作为redis-cli的最后一个参数;
+    * `echo "world" | redis-cli -x set hello`
+  * -c(cluster):连接Redis cluster节点时需要使用,-c选项可以防止moved和ask异常;
+  * -a(auth):若Redis配置了密码,则需要使用;
+  * --scan和--pattern用于扫描指定模式的键,相当于使用sacan命令;
+  * --slave:把当前客户端模拟成当前Redis节点的从节点,可以用来获取当前节点的更新操作;
+  * --rdb:会请求Redis实例生成并发送RDB持久化文件,保存在本地;可以用来持久化文件的定期备份
+  * --pipe:用于将命令封装成Redis同行协议定的格式,批量发送给Redis执行;
+  * --bigkeys: 使用scan命令对Redis的键进行采样,从中找到内存占用比较大的键值.
+  * --eval:用于执行Lua脚本
+  * --latency:
+    * --latency: 测试客户端到目标Redis的网络延迟;
+    * --latency-history:分时段的形式展示延迟信息
+    * --latency-dist: 使用统计图表的形式从控制台输出延迟统计信息
+  * --stat: 实时获取Redis的重要统计信息
+  * --raw和--no-raw
+    * --no-raw要求命令返回结果必须是原始的格式
+    * --no-raw要求命令返回结果必须是格式化后的
+
+* **Pipeline**
+
+  * Redis客户端执行一条命令分为如下四个部分:
+
+    1. 发送命令
+
+    2. 加入命令队列
+    3. 命令执行
+    4. 返回结果
+
+  * 1~4称为Round Trip Time (RTT,往返时间)
+
+  * Redis提供的批量操作命令(mget,mset),可以有效的节约RTT,使用Pipeline执行n次命令,整个过程需要1次RTT.
+
+  * 原生批量命令和Pipeline对比
+
+    * 原生批量命令是原子的,Pipeline是非原子的
+    * 原生批量命令是一个命令对应多个key,Pipeline支持多个命令
+    * 原生批量命令是Redis服务端支持实现的,而Pipeline需要服务端和客户端的共同实现.
+
+* **事务**
+
+  * Redis提供了简单的事务功能,将一组需要一起执行的命令放到`multi`和`exec`两个命令之间.`multi`命令代表事务开始,`exec`命令代表事务结束,它们之间的命令是原子顺序执行的.
+  * 若出现语法错误,会造成整个事务无法执行.
+
+* **Lua脚本**
+
+  * 将Lua脚本加载到Redis内存中:`script load`
+  * 判断Lua脚本加载到内存中的生成的sha码是否存在:`script exists sha [sha...]`
+  * 清除内存中已加载的所有Lua脚本:`script flush`
+  * 杀死正在执行的Lua脚本:`script kill`
+
+------
+
+* **Bitmaps**
+
+  * Bitmaps可以想象成一个以位为单位的数组,数组的每个单元只能存储0或1,数组的下标在Bitmaps中叫做偏移量;
+
+  * **命令:**
+
+    * 设置值:`setbit key offset value`
+    * 获取值:`getbit key offset`
+    * 获取Bitmaps指定范围值为1的个数: `bitcount [stard] [end]`
+    * Bitmaps间的运算:`bitop op destkey key [key ...]`,bitop是一个复合操作,它可以做多个Bitmaps的支持and(交集),or(并集),not(非),xor(异或)操作并将结果保存到destkey中
+    * 计算Bitmaps中第一个值为targetBit的偏移量:`bitpos key target [start][end]`
+    
+
+  ------
+
+* **HyperLogLog**
+
+  * **命令**
+  * 添加:`padd key element [element...]`
+    * 计算独立用户数: `pfcount key [key...]`
+  * 合并: `pfmerge destkey sourcekey [sourcekey...]`
+  * HyperLogLog内存占用量非常小,但是存在错误率,故使用时要注意两点:
+    * 只为了计算独立总数,不需要获取单条数据;
+    * 可以容忍一定错误率
+  
+  ------
+  
+* **发布订阅**
+
+  * 命令:
+    * 发布消息:`publish channel message`
+    * 订阅消息:`subscribe channel [channel...]`
+    * 取消订阅:`unsubscribe channel [channel]`
+    * 按照模式订阅和取消订阅:
+      * `psubscribe pattern [pattern...]`
+      * `punsubscribe pattern [pattern...]`
+    * 查看活跃的频道:`pubsub channels [pattern]`
+    * 查看频道订阅数:`pubsub numsub [channel...]`
+    * 查看模式订阅数:`pubsub numpat`
+  * 注意点:
+    * 客户端在执行订阅命令之后进入订阅状态,只能接受subscribe,psubscribe,unsubscribe,punsubscribe四个命令;
+    * 新开启的订阅客户端,无法收到该频道之前的消息,因为Redis不会对发布的消息进行持久化.
