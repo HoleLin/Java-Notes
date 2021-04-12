@@ -838,3 +838,84 @@
   * 注意点:
     * 客户端在执行订阅命令之后进入订阅状态,只能接受subscribe,psubscribe,unsubscribe,punsubscribe四个命令;
     * 新开启的订阅客户端,无法收到该频道之前的消息,因为Redis不会对发布的消息进行持久化.
+
+  ------
+
+* 客户端通信协议
+
+  * 几乎所有的主流编程语言都有Redis的客户端
+
+    * 客户端与服务端之间的通信协议是在TCP协议之上构建的
+    * Redis指定了RESP(REdis Serialization Protocol,Redis序列化协议)实现客户端与服务端的正常交互
+
+  * **发送命令格式**
+
+    ```
+    *<参数数量> CRLF
+    $<参数1的字节数量> CRLF
+    <参数1> CRLF
+    ...
+    $<参数N的字节数量> CRLF
+    <参数N> CRLF
+    
+    // 示例 set hello world
+    *3
+    $3
+    SET
+    $5
+    hello
+    $5
+    world
+    ```
+
+  * **返回结果格式** 
+
+    * Redis返回结果类型分为以下五种:
+    * 状态回复: 在RESP中第一个字节为"+";
+       * 错误回复: 在RESP中第一个字节为"-";
+      * 证书回复: 在RESP中第一个字节为": ";
+    * 字符串回复: 在RESP中第一个字节为"$";
+    * 多条字符串回复: 在RESP中第一个字节为"*";
+  
+  ------
+  
+  
+  
+* **客户端API**
+  
+  * **client list**
+    
+    * `client list`命令能列出与Redis服务端相连的所有客户端连接信息
+    
+      ```shell
+      127.0.0.1:6379> client list
+      id=47 addr=127.0.0.1:58708 fd=8 name= age=5 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=26 qbuf-free=32742 obl=0 oll=0 omem=0 events=r cmd=client user=default
+      
+      * 标识: id,addr,fd name
+      id: 客户端连接的唯一标识,这个id是随着Redis的连接自增的,重启Redis后会重置为0;
+      addr: 客户端连接的ip和端口;
+      fd: socket的文件描述符,与lsof命令结果中的fd是同一个,如果fd=-1代表当前客户端不是外部客户端,而是Redis内部的伪装客户端.
+      name: 客户端的名字,可以通过client setName和client getName两个命令来设置和获取
+      
+      * 输入缓冲区: qbuf,qbuf-free
+      Redis为每个客户端分配了输入缓存区,它的作用是将客户端发送的命令临时保存,同事Redis从输入缓冲区拉取命令并执行,输入缓冲区为客户端发送命令到Redis执行命令提供了缓存功能.
+      qbuf和qbuf-free分别代表这个缓存区的总容量和剩余容量Redis没有提供相应的配置来规定每个缓冲区的大小,输入缓冲区会根据输入内容大小的不同动态调整,只是要求每个客户端缓冲区的大小不能超过1G,c超过后客户端将被关闭.
+      
+      输入缓冲区使用不当会产生两个问题:
+      |- 一旦某个客户端的输入缓冲区超过1G,客户端将会被关闭.
+      |- 输入缓冲区不收maxmemory控制,假设一个Redis实例设置了maxmenmory为4G,已经存储了2G数据,但是此时输入缓冲区使用了3G,已经超过maxmemory限制,可能产生数据丢失,键值淘汰,OOM等情况
+      
+      ```
+    
+      
+  
+    
+  
+    
+  
+    
+  
+    
+  
+    
+
