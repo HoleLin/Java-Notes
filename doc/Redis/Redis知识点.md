@@ -882,11 +882,11 @@
   
   
 * **客户端API**
-  
+
   * **client list**
-    
+
     * `client list`命令能列出与Redis服务端相连的所有客户端连接信息
-    
+
       ```shell
       127.0.0.1:6379> client list
       id=47 addr=127.0.0.1:58708 fd=8 name= age=5 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=26 qbuf-free=32742 obl=0 oll=0 omem=0 events=r cmd=client user=default
@@ -900,22 +900,176 @@
       * 输入缓冲区: qbuf,qbuf-free
       Redis为每个客户端分配了输入缓存区,它的作用是将客户端发送的命令临时保存,同事Redis从输入缓冲区拉取命令并执行,输入缓冲区为客户端发送命令到Redis执行命令提供了缓存功能.
       qbuf和qbuf-free分别代表这个缓存区的总容量和剩余容量Redis没有提供相应的配置来规定每个缓冲区的大小,输入缓冲区会根据输入内容大小的不同动态调整,只是要求每个客户端缓冲区的大小不能超过1G,c超过后客户端将被关闭.
-      
-      输入缓冲区使用不当会产生两个问题:
-      |- 一旦某个客户端的输入缓冲区超过1G,客户端将会被关闭.
-      |- 输入缓冲区不收maxmemory控制,假设一个Redis实例设置了maxmenmory为4G,已经存储了2G数据,但是此时输入缓冲区使用了3G,已经超过maxmemory限制,可能产生数据丢失,键值淘汰,OOM等情况
-      
       ```
-    
       
-  
+    * 输入缓冲区使用不当会产生两个问题:
+
+      * 一旦某个客户端的输入缓冲区超过1G,客户端将会被关闭.
+      * 输入缓冲区不收maxmemory控制,假设一个Redis实例设置了maxmenmory为4G,已经存储了2G数据,但是此时输入缓冲区使用了3G,已经超过maxmemory限制,可能产生数据丢失,键值淘汰,OOM等情况
+
+    * 监控输入缓冲区异常的方法有两种:
+
+      * 通过定期执行client list 命令,收集qbuf和qbuf-free找到异常的连接记录并分析,最终找到可能出现问题的客户端
+
+      * 通过info命令的info clients模块,找到最大的输入缓冲区
+
+        | 命令         | 优点                                     | 缺点                                                         |
+        | ------------ | ---------------------------------------- | ------------------------------------------------------------ |
+        | client list  | 能精准分析给个客户端来定位               | 执行速度较慢(尤其在连接数较多的情况下),频繁执行存在阻塞Redis的可能 |
+        | info clients | 执行速度比client list快,分析过程较为简单 | 不能精准定位到客户端;不能显示所有缓冲区的总量,只能显示最大量 |
+
+    * 输出缓冲区: obl,oll,omem
+
+      * Redis为每个客户端分配了输出缓冲区,它的作用是保存命令执行的结果返回给客户端,为Redis和客户端交互返回结果提供缓冲;
+
+      * 与输入缓冲区不同的是,输出缓冲区的容量可以通过参数`client-output-buffer-limit`来进行设置,并且输出缓冲区做的更加细致,按照客户端的不同分为三种:普通客户端,发布订阅客户端,slave客户端.
+
+      * 对应的配置规则是:`client-output-buffer-limit <class> <hard limit> <soft limit> <soft seconds>`
+
+        * <class>: 客户端类型,分为三种:
+
+          * normal: 普通客户端
+          * slave: slave客户端,用于复制
+          * pubsub: 发布订阅客户端
+
+        * <hard limit>: 如果客户端使用的输出缓冲区大于<hard limit>,客户端会被立即关闭;
+
+        * <soft limit>和<soft seconds>: 如果客户端使用的输出缓冲区超过了<soft limit>并且持续了<soft limit>秒,客户端会被立即关闭.
+
+        * Redis的默认配置是:
+
+          ```
+          client-output-buffer-limit normal 0 0 0
+          client-output-buffer-limit slave 256mb 64mb 60
+          client-output-buffer-limit pubsub 32mb 8mb 60
+          ```
+
+        * 和输入缓冲区相同是,输出缓冲区也不受到maxmemory的限制,实际上输出缓冲区由两部分组成:固定缓冲区(16 KB)和动态缓冲区,其中固定缓冲区返回比较小的执行结果,而动态缓冲区返回比较大的结果
+
+        * client list中的obl代表固定缓冲区的长度,oll代表动态缓冲区列表的长度,omem代表使用的字节数.
+
+    * 客户端的存活状态
+
+      * client list中age和idle分别代表当前客户端已经连接的时间和最近一次的空闲时间
+
+    * 客户端的限制maxclients和timeout
+
+      * maxclients参数来限制最大客户端连接数,一旦连接数超过maxclients,新的连接将被拒绝.maxclients默认值是100000
+      * config set maxclients 对最大客户端连接数动态设置
+
+    * 客户端类型
+
+      * client list中flag是用于标识当前客户端的类型
+
+      | 序号 | 客户端类型 | 说明                                              |
+      | ---- | ---------- | ------------------------------------------------- |
+      | 1    | N          | 普通客户端                                        |
+      | 2    | M          | 当前客户端是master节点                            |
+      | 3    | S          | 当前客户端是slave节点                             |
+      | 4    | O          | 当前客户端正在执行monitor命令                     |
+      | 5    | x          | 当前客户端正在执行事务                            |
+      | 6    | b          | 当前客户端正在等待阻塞事件                        |
+      | 7    | i          | 当前客户端正在等待VM I/O,但此状态目前已经废弃不用 |
+      | 8    | d          | 一个受监视的键已被修改,EXEC命令将失败             |
+      | 9    | u          | 客户端未被阻塞                                    |
+      | 10   | c          | 回复完整输出后,关闭连接                           |
+      | 11   | A          | 尽可能地快速关闭连接                              |
     
-  
-    
-  
-    
-  
-    
-  
-    
+  * client list命令结果的全部属性
+
+    | 序号 | 参数      | 含义                                                    |
+    | ---- | --------- | ------------------------------------------------------- |
+    | 1    | id        | 客户端连接id                                            |
+    | 2    | addr      | 客户端连接IP和端口                                      |
+    | 3    | fd        | socket的文件描述符                                      |
+    | 4    | name      | 客户端连接名称                                          |
+    | 5    | age       | 客户端连接存活时间                                      |
+    | 6    | idle      | 客户端连接空闲时间                                      |
+    | 7    | flags     | 客户端类型标识                                          |
+    | 8    | db        | 当前客户端正在使用的数据库索引下标                      |
+    | 9    | sub/psub  | 当前客户端订阅的频道或者模式数                          |
+    | 10   | multi     | 当前事务中已执行命令个数                                |
+    | 11   | qbuf      | 输入缓冲区总容量                                        |
+    | 12   | qbuf-free | 输入缓冲区剩余容量                                      |
+    | 13   | obl       | 固定缓冲区的长度                                        |
+    | 14   | oll       | 动态缓冲区的长度                                        |
+    | 15   | omem      | 固定缓冲区和动态缓冲区使用的容量                        |
+    | 16   | events    | 文件描述符事件(r/w): r和w分别代表客户端套接字可读和可写 |
+    | 17   | cmd       | 当前客户端最后一次执行的命令,不包含参数                 |
+
+  * 用于杀掉指定IP地址和端口的客户端:`client kill ip:port`
+
+  * 用于阻塞客户端timeout毫秒数,在此期间客户端连接将被阻塞: `client pause timeout(毫秒)`
+
+    * client pause只对普通和发布订阅客户端有效,对主从复制(从节点内部伪装了一个客户端)是无效的,因此在期间主从复制是正常进行的
+    * client pause可以用一种可控的方式将客户端连接从一个Redis节点切换到另一个Redis节点
+
+  * **monitor**
+
+    * monitor命令用于监控Redis正在执行的命令;
+
+  * 客户端相关配置
+
+    * timeout: 检测客户端空闲连接的超时时间,一旦idle时间达到了timeout,客户端将会被关闭,如果设置为0则不会进行检测;
+    * maxclients: 客户端最大连接数
+    * tcp-keepalive: 检测TCP连接活性的周期,默认值为0,也就是并进行检测,若要设置,则可以设置为60,那么Redis会每隔60秒对它创建的TCP连接进行活性检测,防止大量死链接占用系统资源.
+    * tcp-backlog: TCP三次握手后,会将接受的连接放入队列中,tcp-backlog就是队列的大小,它在Redis中Redis中的默认值是511.通常来讲这个参数不需要调整,但是这个参数会受到操作系统的影响.
+
+------
+
+ * **持久化**
+
+   * RDB持久化是把当前进程数据生成快照保存到硬盘的过程,触发RDB持久化过程分为手动触发和自动触发.
+
+   * 手动触发分别对应save和bgsave命令
+
+     * `save`命令: 阻塞当前Redis服务器,直到RDB过程完成为止,对于内存比较大的实例会造成长时间阻塞[**废弃**]
+     * `bgsave`命令:Redis进程执行fork操作创建子进程,RDB持久化过程有子进程负责,完成后自动结束.阻塞只发生在fork阶段,一般时间很短
+
+   * 除了执行命令手动触发外,Redis内部还存在自动触发的RDB的持久化机制:
+
+     * 使用save相关配置,如"save m n",表示m秒内数据集存在n次修改时,自动触发bgsave;
+     * 若从节点执行全量复制操作,主节点自动执行bgsave生成RDB文件并发送给从节点;
+     * 执行debug reload命令重新加载Redis,也会自动触发bgsave操作;
+     * 默认情况下执行shutdown命令,若没有开启AOF持久化则自动执行bgsave;
+
+   * bgsave是主流的触发RDB持久化方式
+
+     * 执行bgsave命令,Redis父进程判断当前是否存在正在执行的子进程,如RDB/AOF子进程,若存在bgsave命令直接返回;
+     * 父进程执行fork操作创建子进程,fork操作过程中父进程会阻塞,通过info stats命令查看latest_fork_usec选项,可以获取最近一个fork操作的耗时,单位为微妙;
+     * 父进程fork完成后,bgsave命令返回"Backgroud saving started"信息并不再阻塞父进程,可以继续响应其他命令;
+     * 子进程创建RDB文件,根据父进程内存生成临时快照文件,完成后对原有文件进行原子替换.执行lastsave命令可以获取最后一次生成RDB的时间,对应info统计的rdb_last_time选项;
+     * 进程发送信号给父进程表示完成,父进程更新统计信息,具体见 info Persistence下rdb_*相关选项.
+
+   * RDB文件的处理
+
+     * 保存
+
+       * RDB文件保存在dir配置指定的目录下,文件名通过dbfilename配置指定.可以通过执行`config set dir {newDir}`和`config set dbfilename {newFileName}`运行期动态执行,当下次运行是RDB文件会保存到新的目录中
+       * 当遇到坏盘或磁盘写满等情况,可以通过`config set dir {newDir}`在线修改文件路径到可用磁盘路径,之后执行bgsave进行磁盘切换,同样试用于AOF持久化文件.
+
+     * 压缩
+
+       * Redis默认采用LZF算法对生成的RDB文件做压缩处理,压缩后的文件远远小于内存大小,默认开启,可以通过参数`config set rdbcompression {yes|no}`动态修改.
+       * 虽然压缩RDB会消耗CPU,但可大幅降低文件的体积,方便保存到硬盘或者通过网络发送给从节点,因此线上建议开启.
+
+     * 校验
+
+       * 如果Redis加载损坏的RDB文件时拒绝启动,并打印如下日志:
+
+         ```
+         # Short read or OOM loading DB. Unrecoverable error,aborting now
+         ```
+
+       * 这时可以使用Redis提供的redis-check-dump工具检测RDB文件并获取对应的错误报告.
+
+   * RDB的优缺点
+
+​    
+
+​    
+
+​    
+
+​    
 
