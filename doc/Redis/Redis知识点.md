@@ -1017,245 +1017,559 @@
 
 ------
 
- * **持久化**
+#### **持久化**
 
-   * **RDB(Redis DataBase)**
+* **RDB(Redis DataBase)**
 
-     * RDB持久化是把当前进程数据生成快照保存到硬盘的过程,触发RDB持久化过程分为手动触发和自动触发.
+  * RDB持久化是把当前进程数据生成快照保存到硬盘的过程,触发RDB持久化过程分为手动触发和自动触发.
 
-     * 手动触发分别对应save和bgsave命令
+  * **手动触发分别对应save和bgsave命令**
 
-       * `save`命令: 阻塞当前Redis服务器,直到RDB过程完成为止,对于内存比较大的实例会造成长时间阻塞[**废弃**]
-       * `bgsave`命令:Redis进程执行fork操作创建子进程,RDB持久化过程有子进程负责,完成后自动结束.阻塞只发生在fork阶段,一般时间很短
+    * `save`命令: 阻塞当前Redis服务器,直到RDB过程完成为止,对于内存比较大的实例会造成长时间阻塞[**废弃**]
+    * `bgsave`命令:Redis进程执行fork操作创建子进程,RDB持久化过程有子进程负责,完成后自动结束.阻塞只发生在fork阶段,一般时间很短
 
-     * 除了执行命令手动触发外,Redis内部还存在自动触发的RDB的持久化机制:
+  * 除了执行命令手动触发外,Redis内部还存在自动触发的RDB的持久化机制:
 
-       * 使用save相关配置,如"save m n",表示m秒内数据集存在n次修改时,自动触发bgsave;
-       * 若从节点执行全量复制操作,主节点自动执行bgsave生成RDB文件并发送给从节点;
-       * 执行debug reload命令重新加载Redis,也会自动触发bgsave操作;
-       * 默认情况下执行shutdown命令,若没有开启AOF持久化则自动执行bgsave;
+    * 使用save相关配置,如"save m n",表示m秒内数据集存在n次修改时,自动触发bgsave;
+    * 若从节点执行全量复制操作,主节点自动执行bgsave生成RDB文件并发送给从节点;
+    * 执行debug reload命令重新加载Redis,也会自动触发bgsave操作;
+    * 默认情况下执行shutdown命令,若没有开启AOF持久化则自动执行bgsave;
 
-     * bgsave是主流的触发RDB持久化方式
+  * bgsave是主流的触发RDB持久化方式
 
-       * 执行bgsave命令,Redis父进程判断当前是否存在正在执行的子进程,如RDB/AOF子进程,若存在bgsave命令直接返回;
-       * 父进程执行fork操作创建子进程,fork操作过程中父进程会阻塞,通过info stats命令查看latest_fork_usec选项,可以获取最近一个fork操作的耗时,单位为微妙;
-       * 父进程fork完成后,bgsave命令返回"Backgroud saving started"信息并不再阻塞父进程,可以继续响应其他命令;
-       * 子进程创建RDB文件,根据父进程内存生成临时快照文件,完成后对原有文件进行原子替换.执行lastsave命令可以获取最后一次生成RDB的时间,对应info统计的rdb_last_time选项;
-       * 进程发送信号给父进程表示完成,父进程更新统计信息,具体见 info Persistence下rdb_*相关选项.
+    * 执行bgsave命令,Redis父进程判断当前是否存在正在执行的子进程,如RDB/AOF子进程,若存在bgsave命令直接返回;
+    * 父进程执行fork操作创建子进程,fork操作过程中父进程会阻塞,通过info stats命令查看latest_fork_usec选项,可以获取最近一个fork操作的耗时,单位为微妙;
+    * 父进程fork完成后,bgsave命令返回"Backgroud saving started"信息并不再阻塞父进程,可以继续响应其他命令;
+    * 子进程创建RDB文件,根据父进程内存生成临时快照文件,完成后对原有文件进行原子替换.执行lastsave命令可以获取最后一次生成RDB的时间,对应info统计的rdb_last_time选项;
+    * 进程发送信号给父进程表示完成,父进程更新统计信息,具体见 info Persistence下rdb_*相关选项.
 
-     * RDB文件的处理
+  * RDB文件的处理
 
-       * 保存
+    * 保存
 
-         * RDB文件保存在dir配置指定的目录下,文件名通过dbfilename配置指定.可以通过执行`config set dir {newDir}`和`config set dbfilename {newFileName}`运行期动态执行,当下次运行是RDB文件会保存到新的目录中
-         * 当遇到坏盘或磁盘写满等情况,可以通过`config set dir {newDir}`在线修改文件路径到可用磁盘路径,之后执行bgsave进行磁盘切换,同样试用于AOF持久化文件.
+      * RDB文件保存在dir配置指定的目录下,文件名通过dbfilename配置指定.可以通过执行`config set dir {newDir}`和`config set dbfilename {newFileName}`运行期动态执行,当下次运行是RDB文件会保存到新的目录中
+      * 当遇到坏盘或磁盘写满等情况,可以通过`config set dir {newDir}`在线修改文件路径到可用磁盘路径,之后执行bgsave进行磁盘切换,同样试用于AOF持久化文件.
 
-       * 压缩
+    * 压缩
 
-         * Redis默认采用LZF算法对生成的RDB文件做压缩处理,压缩后的文件远远小于内存大小,默认开启,可以通过参数`config set rdbcompression {yes|no}`动态修改.
-         * 虽然压缩RDB会消耗CPU,但可大幅降低文件的体积,方便保存到硬盘或者通过网络发送给从节点,因此线上建议开启.
+      * Redis默认采用LZF算法对生成的RDB文件做压缩处理,压缩后的文件远远小于内存大小,默认开启,可以通过参数`config set rdbcompression {yes|no}`动态修改.
+      * 虽然压缩RDB会消耗CPU,但可大幅降低文件的体积,方便保存到硬盘或者通过网络发送给从节点,因此线上建议开启.
 
-       * 校验
+    * 校验
 
-         * 如果Redis加载损坏的RDB文件时拒绝启动,并打印如下日志:
+      * 如果Redis加载损坏的RDB文件时拒绝启动,并打印如下日志:
 
-           ```
-           # Short read or OOM loading DB. Unrecoverable error,aborting now
-           ```
+        ```
+        # Short read or OOM loading DB. Unrecoverable error,aborting now
+        ```
 
-         * 这时可以使用Redis提供的redis-check-dump工具检测RDB文件并获取对应的错误报告.
+      * 这时可以使用Redis提供的redis-check-dump工具检测RDB文件并获取对应的错误报告.
 
-     * RDB的优缺点
-     
-       * 优点
-         * RDB是一个紧凑压缩的二进制文件,代表Redis在某个时间点上的数据快照,非常使用与备份,全量复制等场景,比如每6个小时bgsave备份,并把EDB文件拷贝到远程机器或者文件系统中hdfs,用于灾难恢复.
-         * Redis加载RDB恢复数据远远快于AOF的方式
-       * 缺点
-         * RDB方式数据没办法做到实时持久化/秒级持久化,因为bgsave每次运行都要执行fork操作创建子进程,属于重量级操作,频繁执行成本过高.
-         * RDB文件使用特定二进制格式保存,Redis版本演进过程中有多个格式的RDB版本,存在老版本Redis服务无法兼容新版RDB格式的问题
-     
-   * **AOF(append only file)**
+  * RDB的优缺点
+  
+    * 优点
+      * RDB是一个紧凑压缩的二进制文件,代表Redis在某个时间点上的数据快照,非常使用与备份,全量复制等场景,比如每6个小时bgsave备份,并把EDB文件拷贝到远程机器或者文件系统中hdfs,用于灾难恢复.
+      * Redis加载RDB恢复数据远远快于AOF的方式
+    * 缺点
+      * RDB方式数据没办法做到实时持久化/秒级持久化,因为bgsave每次运行都要执行fork操作创建子进程,属于重量级操作,频繁执行成本过高.
+      * RDB文件使用特定二进制格式保存,Redis版本演进过程中有多个格式的RDB版本,存在老版本Redis服务无法兼容新版RDB格式的问题
+  
+* **AOF(append only file)**
 
-     > AOF持久化:以独立日志的方式记录每次命令,重启时再重新执行AOF文件中命令达到恢复数据的目的.
-     >
-     > AOF的主要作用是解决了数据持久化的实时性,目前已经是Redis持久化的主流方式.
+  > AOF持久化:以独立日志的方式记录每次命令,重启时再重新执行AOF文件中命令达到恢复数据的目的.
+  >
+  > AOF的主要作用是解决了数据持久化的实时性,目前已经是Redis持久化的主流方式.
 
-     * 开启AOF功能需要设置配置:`appendonly yes`,默认不开启.
+  * 开启AOF功能需要设置配置:`appendonly yes`,默认不开启.
 
-     * AOF文件名通过appendfilename配置设置,默认文件名是appendonly.aof.保存路径桶RDB持久化方式一致,通过dir配置指定.
+  * AOF文件名通过appendfilename配置设置,默认文件名是appendonly.aof.保存路径桶RDB持久化方式一致,通过dir配置指定.
 
-     * AOF的工作流程操作:
+  * AOF的工作流程操作:
 
-       * 命令写入(append): 所有的写入命令会追加到aof_buf(缓冲区)中;
+    * 命令写入(append): 所有的写入命令会追加到aof_buf(缓冲区)中;
 
-         * AOF命令写入的内容是文本协议格式,目的如下:
-           * 文本协议具有很好的兼容性;
-           * 开启AOF后,所有写入命令都包含追加操作,直接采用协议格式,避免了二次处理开销;
-           * 文本协议具有可读性,方便直接修改和处理.
-         * AOF把命令追加到aof_buf中,是因为Redis使用单线程响应命令,如果每次写AOF文件命令都直接追加到硬盘,那么性能完全取决于当前硬盘负载.先写入缓冲区aof_buf中,还有另一个好处,Redis可以提供多种缓冲区同步硬盘的策略,在性能和安全性方面做出平衡.
+      * AOF命令写入的内容是文本协议格式,目的如下:
+        * 文本协议具有很好的兼容性;
+        * 开启AOF后,所有写入命令都包含追加操作,直接采用协议格式,避免了二次处理开销;
+        * 文本协议具有可读性,方便直接修改和处理.
+      * AOF把命令追加到aof_buf中,是因为Redis使用单线程响应命令,如果每次写AOF文件命令都直接追加到硬盘,那么性能完全取决于当前硬盘负载.先写入缓冲区aof_buf中,还有另一个好处,Redis可以提供多种缓冲区同步硬盘的策略,在性能和安全性方面做出平衡.
 
-       * 文件同步(sync): AOF缓冲区根据对应的策略向硬盘做同步操作;
+    * 文件同步(sync): AOF缓冲区根据对应的策略向硬盘做同步操作;
 
-         * Redis提供多种AOF缓冲区同步文件策略,有参数`appendfsync`控制
+      * Redis提供多种AOF缓冲区同步文件策略,有参数`appendfsync`控制
 
-           | 可配置值 | 说明                                                         |
-           | -------- | ------------------------------------------------------------ |
-           | always   | 命令写入aof_buf后调用系统fsync操作同步到AOF文件,fsync完成后线程返回 |
-           | everysec | 命令写入aof_buf后调用系统write操作,write完成后线程返回,fsync同步操作由专门线程每秒调用一次 |
-           | no       | 命令写入aof_buf后调用系统write操作,不对AOF文件做fsync同步,同步硬盘操作由操作系统负责,通常同步周期最长为30秒 |
+        | 可配置值 | 说明                                                         |
+        | -------- | ------------------------------------------------------------ |
+        | always   | 命令写入aof_buf后调用系统fsync操作同步到AOF文件,fsync完成后线程返回 |
+        | everysec | 命令写入aof_buf后调用系统write操作,write完成后线程返回,fsync同步操作由专门线程每秒调用一次 |
+        | no       | 命令写入aof_buf后调用系统write操作,不对AOF文件做fsync同步,同步硬盘操作由操作系统负责,通常同步周期最长为30秒 |
 
-         * 系统调用write和fsync说明:
+      * 系统调用write和fsync说明:
 
-           * write操作会触发延迟写(delayed write)机制.Linux在内核提供页缓冲区用来提高硬盘IO性能.write操作在写入系统缓冲区后直接返回.同步硬盘操作依赖于系统调用度机制,例如:缓冲区也空间写满或达到特定时间周期.同步文件之前,如果此时系统故障宕机,缓冲区内数据将丢失.
-           * fsync针对单个文件操作(比如AOF文件),做强制硬盘同步,fsync将阻塞知道写入硬盘完成后返回,保证了数据持久化.
+        * write操作会触发延迟写(delayed write)机制.Linux在内核提供页缓冲区用来提高硬盘IO性能.write操作在写入系统缓冲区后直接返回.同步硬盘操作依赖于系统调用度机制,例如:缓冲区也空间写满或达到特定时间周期.同步文件之前,如果此时系统故障宕机,缓冲区内数据将丢失.
+        * fsync针对单个文件操作(比如AOF文件),做强制硬盘同步,fsync将阻塞知道写入硬盘完成后返回,保证了数据持久化.
 
-       * 文件重写(rewrite): 随着AOF文件越来越大,需要定期对AOF文件进行重写,达到压缩的目的;
+    * 文件重写(rewrite): 随着AOF文件越来越大,需要定期对AOF文件进行重写,达到压缩的目的;
 
-         * 随着命令不断写入AOF,文件会越来越大,为了解决这个问题,Redis引入AOF重写机制来压缩文件体积,AOF文件重写是把Redis进程内的数据转化为写命令同步到新AOF文件的过程.
-         * 重写后的AOF文件变小的原因:
-           * 进程内已经超时的数据不再写入文件;
-           * 旧的AOF文件含有无效命令,如 del key1,hdel key2...重写使用进程内数据直接生成,这样新的AOF文件只保留最终数据的写入命令;
-           * 多条写明了可以合并为一个,为了防止单条命令过大造成客户端缓冲区溢出,对于list,set,hash,zset等类型操作,以64个元素为界拆分为多条.
-         * AOF重写降低了文件占用空间,除此之外,另一个目的是,更小的AOF文件可以更快地被Redis加载;
-         * AOF重写重写可以手动触发和自动触发:
-           * **手动触发**: 直接调用`bgrewriteaof`命令
+      * 随着命令不断写入AOF,文件会越来越大,为了解决这个问题,Redis引入AOF重写机制来压缩文件体积,AOF文件重写是把Redis进程内的数据转化为写命令同步到新AOF文件的过程.
+      * 重写后的AOF文件变小的原因:
+        * 进程内已经超时的数据不再写入文件;
+        * 旧的AOF文件含有无效命令,如 del key1,hdel key2...重写使用进程内数据直接生成,这样新的AOF文件只保留最终数据的写入命令;
+        * 多条写明了可以合并为一个,为了防止单条命令过大造成客户端缓冲区溢出,对于list,set,hash,zset等类型操作,以64个元素为界拆分为多条.
+      * AOF重写降低了文件占用空间,除此之外,另一个目的是,更小的AOF文件可以更快地被Redis加载;
+      * AOF重写重写可以手动触发和自动触发:
+        * **手动触发**: 直接调用`bgrewriteaof`命令
 
-           * **自动触发**: 根据`auto-aof-rewrite-min-size`和`auto-aof-rewrite-percentage`参数确定自动触发时机;
-             
-             * `auto-aof-rewrite-min-size`: 表示运行AOF重写时文件最小体积,默认为64MB;
-             * `auto-aof-rewrite-percentage`: 代表**当前AOF文件空间(aof_curent_size)**和**上次重写后AOF文件空间(aof_base_size)**的比值
-             * 自动触发时机=**aof_current_size>auto-aof-rewrite-min-size&&(aof_current_size-aof_base_size)/aof_base_size>=auto-auto-aof-rewrite-percentage**
-               * 其中aof_current_size和aof_base_size可以在`info Persistence`统计信息中查看
-             
-             ```mermaid
-             graph TD
-             bgrewriteaof -->|1|父进程
-             父进程 -->|2| fork
-             fork -->|3.1| aof_buff
-             aof_buff --> 旧AOF文件
-             fork -->|3.2| aof_rewrite_buf -->|5.2| 新AOF文件
-             fork --> 子进程
-             子进程 -->|5.1 信号通知父进程| 父进程
-             子进程 -->|4| 新AOF文件
-             新AOF文件 -->|5.3| 旧AOF文件
-             ```
-             
-           * 1- 执行AOF重写请求
+        * **自动触发**: 根据`auto-aof-rewrite-min-size`和`auto-aof-rewrite-percentage`参数确定自动触发时机;
+          
+          * `auto-aof-rewrite-min-size`: 表示运行AOF重写时文件最小体积,默认为64MB;
+          * `auto-aof-rewrite-percentage`: 代表**当前AOF文件空间(aof_curent_size)**和**上次重写后AOF文件空间(aof_base_size)**的比值
+          * 自动触发时机=**aof_current_size>auto-aof-rewrite-min-size&&(aof_current_size-aof_base_size)/aof_base_size>=auto-auto-aof-rewrite-percentage**
+            * 其中aof_current_size和aof_base_size可以在`info Persistence`统计信息中查看
+          
+          ```mermaid
+          graph TD
+          bgrewriteaof -->|1|父进程
+          父进程 -->|2| fork
+          fork -->|3.1| aof_buff
+          aof_buff --> 旧AOF文件
+          fork -->|3.2| aof_rewrite_buf -->|5.2| 新AOF文件
+          fork --> 子进程
+          子进程 -->|5.1 信号通知父进程| 父进程
+          子进程 -->|4| 新AOF文件
+          新AOF文件 -->|5.3| 旧AOF文件
+          ```
+          
+        * 1- 执行AOF重写请求
 
-             * 若当前进程正在执行AOF重写,请求不执行并返回如下响应:
+          * 若当前进程正在执行AOF重写,请求不执行并返回如下响应:
 
-               > ERR Backgroud append only file rewrite already in progress
+            > ERR Backgroud append only file rewrite already in progress
 
-             * 若当前进程正在执行`bgsave`操作们,重写命令延迟到bgsave完成之后再执行,返回如下响应:
+          * 若当前进程正在执行`bgsave`操作们,重写命令延迟到bgsave完成之后再执行,返回如下响应:
 
-               > Backgroud append only file rewriting sceduled
+            > Backgroud append only file rewriting sceduled
 
-           * 2-父进程执行fork创建子进程,开销等同于`bgsave`过程
+        * 2-父进程执行fork创建子进程,开销等同于`bgsave`过程
 
-           * 3.1-主进程fork操作完成后,继续响应其他命令.所有修改命令依然写入AOF缓冲区并更具appendfsync策略同步到硬盘,保证原有AOF机制正确性.
+        * 3.1-主进程fork操作完成后,继续响应其他命令.所有修改命令依然写入AOF缓冲区并更具appendfsync策略同步到硬盘,保证原有AOF机制正确性.
 
-           * 3.2-由于fork操作运用**写时复制技术**,子进程只能共享fork操作时的内存数据.由于父进程依然响应命令,Redis使用"AOF重写缓冲区"保存这部分新数据,防止新AOF文件生成期间丢失这部分数据.
+        * 3.2-由于fork操作运用**写时复制技术**,子进程只能共享fork操作时的内存数据.由于父进程依然响应命令,Redis使用"AOF重写缓冲区"保存这部分新数据,防止新AOF文件生成期间丢失这部分数据.
 
-           * 4-子进程根据内存快照,按照命令合并规则写入新的AOF文件.每次批量写入硬盘数据量由配置`aof-rewrite-incremental-fsync`控制,默认为32MB,单次刷盘数据过多造成硬盘阻塞.
+        * 4-子进程根据内存快照,按照命令合并规则写入新的AOF文件.每次批量写入硬盘数据量由配置`aof-rewrite-incremental-fsync`控制,默认为32MB,单次刷盘数据过多造成硬盘阻塞.
 
-           * 5.1-新AOF文件写入万抽,子进程发送信号给父进程,父进程更新统计信息,具体见`info persistence`下aof_*相关统计.
+        * 5.1-新AOF文件写入万抽,子进程发送信号给父进程,父进程更新统计信息,具体见`info persistence`下aof_*相关统计.
 
-           * 5.2-父进程吧AOF重写缓冲区的数据写入到新的AOF文件.
+        * 5.2-父进程吧AOF重写缓冲区的数据写入到新的AOF文件.
 
-           * 5.3-使用新AOF文件替换老文件,完成AOF重写;
+        * 5.3-使用新AOF文件替换老文件,完成AOF重写;
 
-       * 重启加载(load): 当Redis服务器重启时,可以加载AOF文件进行数据恢复;
+    * 重启加载(load): 当Redis服务器重启时,可以加载AOF文件进行数据恢复;
 
-         * AOF和RDB文件都可以用于服务器重启时的数据恢复.
+      * AOF和RDB文件都可以用于服务器重启时的数据恢复.
 
-         * Redis持久化文件加载流程:
+      * Redis持久化文件加载流程:
 
-           ``` mermaid
-           graph TD
-           redis启动-->开启AOF{开启AOF}
-           开启AOF{开启AOF}-->|no|存在RDB?{存在RDB?}
-           存在RDB?{存在RDB?}-->|no|启动成功
-           存在RDB?{存在RDB?}-->|yes|加载RDB
-           加载RDB-->成功?{成功?}
-           成功?{成功?}-->|yes|启动成功
-           成功?{成功?}-->|no|启动失败
-           开启AOF{开启AOF}-->|yes|存在AOF?{存在AOF?}
-           存在AOF?{存在AOF?}-->|no|存在RDB?{存在RDB?}
-           存在AOF?{存在AOF?}-->|yes|加载AOF
-           加载AOF-->成功?{成功?}
-           ```
+        ``` mermaid
+        graph TD
+        redis启动-->开启AOF{开启AOF}
+        开启AOF{开启AOF}-->|no|存在RDB?{存在RDB?}
+        存在RDB?{存在RDB?}-->|no|启动成功
+        存在RDB?{存在RDB?}-->|yes|加载RDB
+        加载RDB-->成功?{成功?}
+        成功?{成功?}-->|yes|启动成功
+        成功?{成功?}-->|no|启动失败
+        开启AOF{开启AOF}-->|yes|存在AOF?{存在AOF?}
+        存在AOF?{存在AOF?}-->|no|存在RDB?{存在RDB?}
+        存在AOF?{存在AOF?}-->|yes|加载AOF
+        加载AOF-->成功?{成功?}
+        ```
 
-           
+        
 
-         * 1- AOF持久化开启且存在AOF文件时,优先加载AOF文件,打印如下日志
+      * 1- AOF持久化开启且存在AOF文件时,优先加载AOF文件,打印如下日志
 
-           > DB loaded from append only file: 5.841 seconds
+        > DB loaded from append only file: 5.841 seconds
 
-         * 2- AOF关闭或者AOF文件不存在时,加载RDB文件,打印如下日志:
+      * 2- AOF关闭或者AOF文件不存在时,加载RDB文件,打印如下日志:
 
-           > DB loaded from disk: 5.586 seconds
+        > DB loaded from disk: 5.586 seconds
 
-         * 3- 加载AOF/RDB文件后,Redis启动成功;
+      * 3- 加载AOF/RDB文件后,Redis启动成功;
 
-         * 4- AOF/RDB文件存在错误时,Redis启动失败并打印错误信息;
+      * 4- AOF/RDB文件存在错误时,Redis启动失败并打印错误信息;
 
-     * 文件校验
+  * 文件校验
 
-       * 加载损坏的AOF文件时会拒绝启动,并打印如下日志:
+    * 加载损坏的AOF文件时会拒绝启动,并打印如下日志:
 
-         > Bad file format reading the append only file: make a backup of your AOF file, then use ./redis-check-aof --fix <filename>
+      > Bad file format reading the append only file: make a backup of your AOF file, then use ./redis-check-aof --fix <filename>
 
-         * 对于错误格式的AOF文件,先进行备份,然后采用`redis-check-aof --fix`命令进行修复,修复后使用`diff -u`对比数据的差异,找出丢失的数据,有些可以人工修改不全.
+      * 对于错误格式的AOF文件,先进行备份,然后采用`redis-check-aof --fix`命令进行修复,修复后使用`diff -u`对比数据的差异,找出丢失的数据,有些可以人工修改不全.
 
-         > AOF文件可能存在结尾不完整的情况,比如机器突然掉电导致AOF尾部文件命令写入不全.Redis为我们提供了`aof-load-truncated`配置来兼容这种情况,默认开启,加载AOF时,当遇到此问题是会忽略并继续启动,同时打印如下告警日志:
-         >
-         > \# !!! Waring: short read while loading the AOF file !!!
-         >
-         > \# !!! Truncating the AOF at offset 3997856725!!!
-         >
-         > \# AOF loaded anyway beacause aof-load-truncated is enabled
+      > AOF文件可能存在结尾不完整的情况,比如机器突然掉电导致AOF尾部文件命令写入不全.Redis为我们提供了`aof-load-truncated`配置来兼容这种情况,默认开启,加载AOF时,当遇到此问题是会忽略并继续启动,同时打印如下告警日志:
+      >
+      > \# !!! Waring: short read while loading the AOF file !!!
+      >
+      > \# !!! Truncating the AOF at offset 3997856725!!!
+      >
+      > \# AOF loaded anyway beacause aof-load-truncated is enabled
 
-     * AOF追加阻塞
+  * AOF追加阻塞
 
-       * 当开启AOF持久化时,常用的同步硬盘的策略是everysec,用于平衡性能和数据安全性.对于这种方式,Redis使用另一条线程每秒fsync同步硬盘,当系统硬盘资源繁忙时,会造成Redis主线程阻塞.
+    * 当开启AOF持久化时,常用的同步硬盘的策略是everysec,用于平衡性能和数据安全性.对于这种方式,Redis使用另一条线程每秒fsync同步硬盘,当系统硬盘资源繁忙时,会造成Redis主线程阻塞.
 
-         ``` mermaid
-         graph TB
-         
-         主线程 -->|1| AOF缓冲区
-         AOF缓冲区 -->|2| 同步线程
-         同步线程 --> 同步磁盘
-         AOF缓冲区 -->|3| 对比上次fsync时间{对比上次fsync时间}
-         对比上次fsync时间{对比上次fsync时间} -->|大于2秒| 阻塞 
-         对比上次fsync时间{对比上次fsync时间} -->|小于2秒| 成功
-         ```
-       
-     *    阻塞流程分析
-
-       * 主线程复制写入AOF缓冲区
-       * AOF线程复制每秒执行一次同步磁盘操作,并记录最近一次同步时间
-       * 主线程复制对比上次AOF时间
-         * 若距上次同步成功时间在2秒内,主线程直接返回;
-         * 若距上次同步成功时间超过2秒,主线程将会阻塞,直到同步操作完成
-
-     * AOF阻塞流程可以发现两个问题
-
-       * everysec配置最多可能丢失2秒数据,而不是1秒;
-       * 若系统fsync缓慢,将会导致Redis主线程阻塞影响效率.
-
-     * AOF阻塞问题定位
-
-       * 发生AOF阻塞时,Redis输出如下日志,用于记录AOF fsync阻塞导致拖慢Redis服务的行为:
-
-         > Asynchronous AOF fsync is taking too long (disk is busy).Wirting the AOF buffe without waiting for fsync to complete,this may slow down Redis
-
-       * 每当发生AOF追加阻塞事件发生时,在`info Persistence`统计中,aof_delayed_fsync指标会累加,查看这个指标方便定位AOF阻塞问题.
-
-       * AOF同步最多运行2秒的延迟,当延迟发生时说明硬盘存在搞复杂问题,可以通过监控工具如iotop,定位消耗硬盘IO资源.
-
-   ​    
-
+      ``` mermaid
+      graph TB
       
+      主线程 -->|1| AOF缓冲区
+      AOF缓冲区 -->|2| 同步线程
+      同步线程 --> 同步磁盘
+      AOF缓冲区 -->|3| 对比上次fsync时间{对比上次fsync时间}
+      对比上次fsync时间{对比上次fsync时间} -->|大于2秒| 阻塞 
+      对比上次fsync时间{对比上次fsync时间} -->|小于2秒| 成功
+      ```
+    
+  *    阻塞流程分析
+
+    * 主线程复制写入AOF缓冲区
+    * AOF线程复制每秒执行一次同步磁盘操作,并记录最近一次同步时间
+    * 主线程复制对比上次AOF时间
+      * 若距上次同步成功时间在2秒内,主线程直接返回;
+      * 若距上次同步成功时间超过2秒,主线程将会阻塞,直到同步操作完成
+
+  * AOF阻塞流程可以发现两个问题
+
+    * everysec配置最多可能丢失2秒数据,而不是1秒;
+    * 若系统fsync缓慢,将会导致Redis主线程阻塞影响效率.
+
+  * AOF阻塞问题定位
+
+    * 发生AOF阻塞时,Redis输出如下日志,用于记录AOF fsync阻塞导致拖慢Redis服务的行为:
+
+      > Asynchronous AOF fsync is taking too long (disk is busy).Wirting the AOF buffe without waiting for fsync to complete,this may slow down Redis
+
+    * 每当发生AOF追加阻塞事件发生时,在`info Persistence`统计中,aof_delayed_fsync指标会累加,查看这个指标方便定位AOF阻塞问题.
+
+    * AOF同步最多运行2秒的延迟,当延迟发生时说明硬盘存在搞复杂问题,可以通过监控工具如iotop,定位消耗硬盘IO资源.
+
+#### 复制 
+
+* **建立复制** 
+
+  > 参与复制的Redis实例划分为主节点(master)和从节点(slave).
+  >
+  > **主从复制的开启，完全是在从节点发起的；不需要我们在主节点做任何事情。**
+  >
+  > 默认情况下,Redis都是主节点.每个从节点只能有一个主节点,而主节点可以同时有多个从节点.
+  >
+  > 复制的数据流是单向的,只能由主节点复制到从节点;
+
+  * 配置复制的方式有三种:
+    * 在配置文件中加入`slaveof {masterHost} {masterPort}`随Redis启动生效
+    * 在`redis-server`启动命令后加入`--slaveof {masterHost} {masterPort}`
+    * 登录客户端后,直接使用命令:`slaveof {masterHost} {masterPort}`
+  * `slaveof`本身是异步命令,执行`slaveof`命令时,节点只保存主节点信息后返回,后续复制流程在节点内部异步执行.
+  * 可以通过`info replication`查看建立的信息;
+  * `slaveof`还可以实现**切主节点操作**,`slaveof {newMasterIp} {newMasterPort}`,主要流程:
+    * 断开与旧节点复制关系
+    * 与新主节点建立复制关系
+    * **删除从节点当前所有数据**
+    * 对新主节点进行复制操作
+    * **注: 从节点首次与主节点建立主从关系时,也会经历切主节点操作,即会"删除从节点当前所有数据"**
+  * 若主节点设置了`requirepass`参数进行密码验证,这时从节点与主节点的复制连接是通过一个特殊标识的客户端来完成的,因此需要在从节点配置`masterauth`参数与主节点密码保持一致,这样才能保证从节点正确的连接到主节点并发起复制流程;
+
+  ```
+  建立主从复制成功后,从节点Redis服务端日志: 
+  18378:S 24 Apr 2021 22:30:04.627 * Before turning into a replica, using my own master parameters to synthesize a cached master: I may be able to synchronize w
+  18378:S 24 Apr 2021 22:30:04.627 * REPLICAOF 127.0.0.1:6379 enabled (user request from 'id=4 addr=127.0.0.1:35846 fd=8 name= age=54 idle=0 flags=N db=0 sub=0 s=r cmd=slaveof user=default')
+  18378:S 24 Apr 2021 22:30:05.542 * Connecting to MASTER 127.0.0.1:6379
+  18378:S 24 Apr 2021 22:30:05.543 * MASTER <-> REPLICA sync started
+  18378:S 24 Apr 2021 22:30:05.543 * Non blocking connect for SYNC fired the event.
+  18378:S 24 Apr 2021 22:30:05.543 * Master replied to PING, replication can continue...
+  18378:S 24 Apr 2021 22:30:05.543 * Trying a partial resynchronization (request 4d21b3738e5cd62e4819cecf0a1b6aa78043b621:1).
+  18378:S 24 Apr 2021 22:30:05.544 * Full resync from master: 87fcdf7ac1958375aeea7e62a27427fb28d24f59:0
+  18378:S 24 Apr 2021 22:30:05.544 * Discarding previously cached master state.
+  18378:S 24 Apr 2021 22:30:05.616 * MASTER <-> REPLICA sync: receiving 175 bytes from master to disk
+  18378:S 24 Apr 2021 22:30:05.617 * MASTER <-> REPLICA sync: Flushing old data
+  18378:S 24 Apr 2021 22:30:05.617 * MASTER <-> REPLICA sync: Loading DB in memory
+  18378:S 24 Apr 2021 22:30:05.617 * Loading RDB produced by version 6.0.5
+  18378:S 24 Apr 2021 22:30:05.617 * RDB age 0 seconds
+  18378:S 24 Apr 2021 22:30:05.617 * RDB memory usage when created 1.85 Mb
+  18378:S 24 Apr 2021 22:30:05.617 * MASTER <-> REPLICA sync: Finished with success
+  
+  
+  建立主从复制成功后,主节点Redis服务端日志:
+  1263:M 24 Apr 2021 22:17:00.406 * Replica 127.0.0.1:6380 asks for synchronization
+  1263:M 24 Apr 2021 22:17:00.406 * Partial resynchronization not accepted: Replication ID mismatch (Replica asked for '880b469fd4d33a88e0a105a506de61542933659d', my replication IDs are 'a058d0cf5dbe08daff7afb8422488c347a71dfa3' and '0000000000000000000000000000000000000000')
+  1263:M 24 Apr 2021 22:17:00.406 * Replication backlog created, my new replication IDs are 'b05ab495c0a8821102208dccc0030e6c57edd0cb' and '0000000000000000000000000000000000000000'
+  1263:M 24 Apr 2021 22:17:00.406 * Starting BGSAVE for SYNC with target: disk
+  1263:M 24 Apr 2021 22:17:00.407 * Background saving started by pid 12633
+  12633:C 24 Apr 2021 22:17:00.411 * DB saved on disk
+  12633:C 24 Apr 2021 22:17:00.411 * RDB: 0 MB of memory used by copy-on-write
+  1263:M 24 Apr 2021 22:17:00.445 * Background saving terminated with success
+  1263:M 24 Apr 2021 22:17:00.445 * Synchronization with replica 127.0.0.1:6380 succeeded
+  
+  
+  Redis3.0之后在输出的日志开头会有**M,S,C**等标志,对应的含义是:
+  M=当前为主节点日志
+  S=当前为从节点日志
+  C=子进程日志
+  ```
+
+* **断开复制**
+
+  * 在从节点执行`slaveof no one`来断开与主节点复制关系
+  * 断开复制主要流程:
+    * 断开与主节点复制关系;
+    * 从节点晋升为主节点;
+  * 从节点断开后并不会删除原来复制过来的数据,只是无法再获取主节点上的数据变化;
+
+* **配置从节点只读**
+
+  > 默认情况下,从节点使用`slave-read-only=yes`配置为只读模式.由于复制只能从主节点到从节点,对于从节点的任何修改主节点都无法感知,修改会造成主从数据不一致.
+
+* **传输延迟**
+
+  * 主从节点一般部署在不同机器上,复制时的网络延迟成为需要考虑的问题,Redis提供了`repl-disable-tcp-nodelay`参数用于控制是否关闭**TCP_NODELAY**,默认关闭
+    * 关闭时,主节点产生的命令数据无论大小都会及时地发送给从节点,这样主从之间延迟会变小,但增加了网络带宽的消耗.适合主从之间网络环境良好的场景.
+    * 开启时,主节点会合并较小的TCP数据包从而节省带宽.默认发送时间间隔取决于Linux的内核,一般默认为40毫秒.这样配置节省了带宽但增加了主从之间的延迟.适用于主从网络环境复杂或带宽紧张的场景.
+
+* **拓扑**
+
+  * Redis的复制拓扑结构可以支持单层或多层复制关系:
+    * **一主一从**(故障转移)
+      * 用于主节点出现宕机是从节点提供故障转移支持.当应用写命令并发量较高且需要持久化时,可以只在从节点上开启AOF,这样既保证数据安全性同时也避免了持久化对主节点的性能干扰.
+      * 但需要注意的是,当主节点关闭持久化功能时,如果主节点脱机要避免自动重启操作.因为主节点之前没有开启持久化功能自动重启数据集为空,这时从节点如果继续复制从节点会导致从节点数据也被清空的情况,丧失了持久化的意义.
+      * 安全的做法是在从节点上执行`slaveof no one`断开与主节点的复制关系,再重启主节点从而避免这个问题;
+    * **一主多从**(读写分离)
+      * 又称为星形拓扑结构使得应用端可以利用多个节点实现读写分离.
+      * 对于读占比较大的场景,可以把读命令发送到从节点来分担主节点压力.同时在日常开发中如果需要执行一些比较耗时的读命令,如keys,sort等,可以在其中一台从节点上执行,防止慢查询对主节点造成阻塞从而影响线上服务的稳定性.
+      * 对于写并发量较高的场景,多个从节点会导致主节点写命令的多次发送从而过度消耗网络带宽,同时也加重了主节点的负载影响服务稳定性.
+    * **树状主从结构**
+      * 又称为树状拓扑结构使用从节点不但可以复制主节点数据,同时可以作为其他从节点的主节点继续向下层复制.通过引入复制中间层,可以有效降低主节点负载和需要传送给从节点的数据量.
+      * 数据实现一层一层的向下复制,当主节点需要挂载多个节点时为了避免对主节点的性能干扰,可以采用树状主从结构降低节点压力.
+
+* **原理**
+
+  * **复制过程**
+
+    * **保存主节点信息**
+
+      * 执行`slaveof`后从节点只保存主节点的地址信息便直接返回,这时建立复制流程还没开始,在从节点上执行`info replication`可以看到如下信息:
+
+        ```
+        master_host:127.0.0.1
+        master_port:6379
+        master_link_status:down
+        master_last_io_seconds_ago:-1
+        master_sync_in_progress:0
+        ```
+
+      * 执行`slaveof`后Redis服务端会打印如下日志:
+
+        ```
+        SLAVE OF 127.0.0.1:6379 enabled (user request from 'id=2 addr=127.0.0.1:8317 fd=7 name= age=0 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=32768 obl=0 oll=0 omem=0 events=r cmd=slaveof')
+        ```
+
+    * **主从建立socket连接**
+
+      * 从节点(slave)内部通过每秒运行的定时任务维护复制相关逻辑,当定时任务发现存在新的主节点后,会尝试与该节点建立网络连接,从节点会建立一个socket套接字,专门用于接受主节点发送的复制命令;
+      * 如果从节点无法建立连接,定时任务会无限重试知道成功或者执行`slaveof no one`取消复制
+
+    * **发送ping命令**
+
+      * 连接建立成功后从节点发送ping请求进行首次通信,ping请求主要目的如下
+
+        * 检测主从节点之间网络套接字是否可用;
+        * 检测主节点当前是否可以接受命令;
+
+      * 若发送ping命令后,从节点没有收到主节点的pong回复或者超时,从节点会断开复制连接,下次定时任务会发起重连;
+
+        ```
+        从节点发送的ping命令返回,Redis打印如下日志
+        [23912] 24 Apr 20:11:45.188 * Master replied to PING, replication can continue...
+        ```
+
+    * **权限验证**
+
+      * 若主节点设置了`requirepass`参数,则需要密码验证,从节点必须配置masterauth参数保证与主节点相同的密码才能通过验证;如果验证失败复制将终止,从节点重新发起复制流程;
+
+    * **同步数据集**
+
+      * 主从复制连接正常通信后,对于首次建立复制的场景,主节点会把持有的数据全部发送给从节点,这部分操作是耗时最长的步骤.Redis在2.8版本以后采用新的复制命令`psync`进行数据同步,原来的`sync`命令依然支持,保证新旧版本的兼容性.
+
+    * **命令持续复制**
+
+      * 当主节点把当前的数据同步给从节点后,便完成了复制的建立流程,然后主节点会持续地把写命令发送给从节点,保证主从数据一致性.
+
+* **数据同步**
+
+  * Redis在2.8版本以后采用新的复制命令`psync`进行数据同步,同步过程分为:全量复制和部分复制.
+
+    * **全量复制:**
+
+      * 一般用于初次复制场景,Redis早期支持的复制功能只有全量复制,它会把主节点全部数据一次性发送给从节点,当数据量较大时,会对主从节点和网络造成很大的开销;
+
+    * **部分复制:**
+
+      * 用于处理在主从复制中因网络闪断等原因造成的数据丢失场景,当从节点再次连上主节点后,如果条件允许,主节点会补发丢失数据给从节点.因为补发的数据远远小于全量数据,可以有效避免全量复制的过高开销;
+      * 部分复制是对老版复制的重大优化,有效避免了不必要的全量复制操作.因此当使用功能时,尽量采用2.8以上版本的Redis.
+      * psync命令运行需要一下组件支持:
+        * 主从节点各自复制偏移量;
+        * 主节点复制积压缓冲区;
+        * 主节点运行id;
+
+    * **复制偏移量**
+
+      * 参与复制的主从节点都会维护自身复制偏移量.**主节点(master)**在处理完写入命令后,会把命令的字节长度做累加记录,统计信息在info replication 中的`master_repl_offset`指标中;
+      * 从节点(slave)每秒种上报自身的复制偏移量给主节点,因此主节点也会保存从节点的复制偏移量;
+      * **从节点(slave)**在接收到主节点发送的命令后,也会累加记录自身的偏移量.统计信息在`info replication`中的`slave_repl_offset`指标中;
+      * 可以通过主节点的统计信息,计算出**master_repl_offset**-**slave_repl_offset**字节量,判断主从节点复制相差的数据量,根据这个差值判定当前复制的健康度.如果主从之间复制偏移量相差较大,则可能是网络延迟或命令阻塞等原因引起;
+
+    * **复制积压缓冲区**
+
+      * 复制积压缓冲区是保存在主节点上的一个固定长度的队列,默认大小为1MB,当主节点有连接从节点(slave)时被创建,这时主节点(master)响应写命令时,不但会把命令发送给从节点,还会写入复制积压缓冲区;
+
+      ```mermaid
+      graph LR
+      master-->|传播命令|slave
+      master-->累加主偏移量
+      slave-->累加从偏移量
+      style 累加主偏移量 stroke:#000,stroke-width:2px,stroke-dasharray:5,5;
+      style 累加从偏移量 stroke:#000,stroke-width:2px,stroke-dasharray:5,5;
+      ```
+
+      ```mermaid
+      graph LR
+      master-->|传播命令|slave
+      master-->复制积压缓冲区
+      style 复制积压缓冲区 stroke:#000,stroke-width:2px,stroke-dasharray:5,5;
+      ```
+
+      * 由于缓冲区本质上是先进先出的定长队列,所以能实**现保存最近已复制数据的功能**,用于部分复制和复制命令丢失的数据补救.复制缓存区相关统计信息保存在主节点的`info replication`中:
+
+        ```
+        # Replication
+        role:master
+        connected_slaves:1
+        slave0:ip=127.0.0.1,port=6380,state=online,offset=2899,lag=1
+        master_repl_offset:2899
+        // 开启复制缓冲区
+        repl_backlog_active:1
+        // 缓存区最大长度
+        repl_backlog_size:1048576
+        // 起始偏移量,计算当前缓存区可用范围
+        repl_backlog_first_byte_offset:2
+        // 已保存数据的有效长度
+        repl_backlog_histlen:2898
+        ```
+
+      * 根据统计指标,可计算出复制积压缓冲区内的可用偏移量范围[repl_backlog_first_byte_offset,repl_backlog_first_byte_offset+repl_backlog_histlen]
+
+    * **主节点运行ID**
+
+      * 每个Redis节点启动后都会动态分配一个40位的十六进制字符串作为运行ID.运行ID的主要作用是用来唯一识别Redis节点.如果只使用ip+port的方式识别主节点,那么主节点重启变更了整体数据集(替换RDB/AOF文件),从节点再基于偏移量复制数据将是不安全的,因此当运行ID变化后从节点将做全量复制.
+
+      * 如何在不改变运行ID的情况下重启呢?
+
+        * 当需要调优一些内存相关配置,例如:`hash-max-ziplist-value`等,这些配置需要Redis重新加载才能已存在的数据,这时可以使用`redis-cli debug reload`命令重新加载RDB保持运行ID不变,从而有效避免不必要的全量复制.
+
+          ```
+          redis-cli -p 6379 info server |grep run_id
+          redis-cli debug reload
+          redis-cli -p 6379 info server |grep run_id
+          ```
+
+        * **`debug reload`命令会阻塞当前Redis节点的主线程,阻塞期间会删除本地RDB快照并清空数据之后再加载RDB文件.隐藏对于大数据量的主节点和无法容忍阻塞的场景,谨慎使用**
+
+    * **psync命令**
+
+      * 从节点使用psync命令完成部分复制和全量复制功能
+        * 命令格式:`psync {runId} {offset}`
+        * runId: 从节点所复制主节点的运行id;
+        * offset:当前从节点已复制的数据偏移量;
+
+          ```mermaid
+        sequenceDiagram
+      	      participant slave
+      	      participant master
+      	          slave ->> master : "psync {runId} {offset}"
+      	          master->> slave  : "1: +FULLRESYNC"
+      	          master->> slave : "2: +CONTINUE"
+      	          master->> slave : "3: +ERR"
+      	  ```
+      
+    * 从节点(slave)发送psync命令给主节点,参数runId是当前从节点保存的主节点运行ID,如果没有则默认值为-1,参数offset是当前从节点保存的复制偏移量,如果是第一次参与复制则默认值为-1
+      * 主节点(master)根据psync参数和自身数据情况决定响应结果:
+        * 若回复"+FULLRESYNC",那么从节点将触发全量复制流程;
+        * 若回复"+CONTINUE": 从节点将触发部分复制流程;
+        * 若回复"+ERR": 说明主节点版本低于Redis2.8,无法识别psync命令,从节点将发送旧版的sync命令触发全量复制流程;
+
+  * **全量复制流程说明**
+
+    1. 发送psync命令进行数据同步,由于是第一次进行复制,从节点没有复制偏移量和主节点的运行ID,所以发送`psync -1`
+
+    2. 主节点根据`psync -1`解析出当前为全量复制,回复"+FULLRESYNC "响应;
+
+    3. 从节点接收主节点的响应数据保存运行ID和偏移量offset,执行到当前步骤是从节点打印如下日志:
+
+        ```
+        18378:S 24 Apr 2021 22:30:05.543 * Trying a partial resynchronization (request 4d21b3738e5cd62e4819cecf0a1b6aa78043b621:1).
+        18378:S 24 Apr 2021 22:30:05.544 * Full resync from master: 87fcdf7ac1958375aeea7e62a27427fb28d24f59:0
+        ```
+
+    4. 主节点执行bgsave保存RDB文件到本地;
+
+    5. 主节点发送RDB文件给从节点,从节点吧接收到的RDB文件保存在本地直接作为从节点的数据文件,接收完RDB后从节点打印相关日志,可以在日志看到主节点发送的数据量.
+
+        ```
+         MASTER <-> REPLICA sync: receiving 175 bytes from master to disk
+        ```
+
+    * **注**:对于数据量较大的主节点,比如生成的RDBwe年超过6GB以上要格外小心.传输文件这一步操作非常耗时,速度取决于主从节点之间的网络带宽,通过细致分析Full resync和 MASTER <-> REPLICA可以算出RDB文件从创建到传输完毕消耗的总时间.
+      * 若总时间超过`repl_timeout`所配置的值(默认60秒),从节点将放弃接受RDB文件并清理已经下载的临时文件,导致全量复制失败.
+        * 针对数据量较大的节点,建议调大`repl_timeout`参数防止出现全量同步数据超时;
+      * 无盘复制:通过`repl-diskless-sync`参数控制,默认关闭;
+        * 使用场景: 主节点所在机器磁盘性能较差但网络带宽比较充裕的场景;
+    6. 对于从节点开始接收RDB快照到接收完成期间,主节点任然响应读写命令,因此主节点会把这期间写命令数据保存在复制客户端缓冲区内,当从节点加载完RDB文件后,主节点再把缓冲区内的数据发送给从节点,保证主从节点之间数据一致性.
+       * 若主节点创建和传输RDB的时间过长,对于高流量写入场景非常容易造成主节点复制客户端缓冲区溢出.默认配置为`client-output-buffer-limit slave 256MB 64MB 60`
+         * 若60秒内缓冲区消耗持续大于64MB或者直接超过256MB,主节点将直接关闭复制客户端连接,造成同步失败
+         * 需要根据主节点数据量和写命令并发量调整`client-output-buffer-limit slave`配置,避免全量复制期间客户端缓冲区溢出
+
+    7. 从节点接收完朱节点传送来的全部数据会清空自身旧数据
+    8. 从节点清空数据后开始加载RDB文件,对于较大的RDB文件,这一步依然比较耗时.
+       * 对于线上做读写分离的场景,从节点也负责响应读命令.如果此时从节点正处于全量复制阶段或者复制中断,那么从节点响应读命令可能拿到过期或者错误数据.
+         * 对于这种场景,Redis复制提供了`replica-serve-stale-data`参数,默认开启状态.如果开启则从节点依然响应所有命令
+         * 对于无法容忍数据不一致的应用场景可以设置no来关闭执行,此时从节点除了info和slaveof命令之外所有命令只返回"SYNC with master in progress"
+    9. 从节点成功加载完RDB后,如果当前节点开启了AOF持久化功能,它会立刻做`bgrewirteaof`操作,为了保证全量复制后AOF持久化文件立刻可用.
+
+  * **全量复制主要开销**
+
+    * 主节点bgsave时间
+  * RDB文件网络传输时间
+    * 从节点清空数据时间
+  * 从节点加载RDB时间
+    * 可能的AOF重写时间
+  
+  * **部分复制**
+  
+    * 部分复制主要是Redis针对全量复制的过高开销做出的一种优化措施,使用`psync {runId} {offset}`命令实现.
+      * 当从节点正在复制主节点时,若出现网络闪断或者命令丢失等异常情况是,从节点会向主节点要求补发丢失的命令数据;若主节点的复制积压缓冲区内存在这部分数据则直接发给从节点,从而保证数据一致性.
+  
+  * **部分复制流程分析**
+  
+    1. 当主从节点之间出现网络中断时,若超过`repl-timeout`时间,主节点会认为从节点故障并中断复制连接,
+    2. 主从连接中断期间主节点依然响应命令,但因复制连接中断命令无法发送给从节点,不过主节点内部存在的复制积压缓冲区,依然可以保存最近一段时间的写命令数据,默认最大缓存1MB
+    3. 当主从节点网络恢复后,从节点会再次连上主节点
+  
+    
+  
+    
+  
+    
+  
+   
 
 ​    
 
