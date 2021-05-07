@@ -2,6 +2,22 @@
 
 #### 常用命令
 
+* 帮助命令
+
+  ```
+  docker version
+  docker info 
+  docker --help
+  ```
+
+* 镜像命令
+
+  * docker images
+    * -a: 列出所有镜像
+    * -q: 只显示镜像ID
+    * --digests: 显示摘要信息
+    * --no-trunc：不截断输出，显示完整的镜像ID
+
 *  列出所有的容器 ID
 
   ```sh
