@@ -1,5 +1,9 @@
 ## ElasticSearch
 
+#### 参考文献
+
+* [白日梦的Elasticsearch笔记---进阶篇、32种查询方法、15中聚合方式、7种优化后的查询技巧](https://mp.weixin.qq.com/s/m7PLNAJdN9dAzq_Nsv6Gqw)
+
 #### 目录
 
 * <a href="#搜索基本信息">搜索基本信息</a>
@@ -35,7 +39,7 @@
     * <a href="#match">分词全文检索 match</a>
     * <a href="#match_phrase">短语检索match_phrase</a>
     * <a href="#intervals">间隔检索intervals</a>
-    * <a href="#match_phrase_prefix">短语前缀检索: `match_phrase_prefix</a>
+    * <a href="#match_phrase_prefix">短语前缀检索: match_phrase_prefix</a>
     * <a href="#multi_match">多字段匹配检索: `multi_match`</a>
     * <a href="#query_string">query_string</a>
     * <a href="#simple_query_string">simple_query_string</a>
@@ -691,7 +695,26 @@ curl 'localhost:9200/get-together/_search' -d
         }
       }
     }
-    
+    GET /your_index/your_type/_search
+    {    
+       # Fuzzy Query 模糊查询会提供容错的处理
+       "query": {
+            "fuzzy" : {
+                "user" : {
+                    "value": "白日梦",
+                    "boost": 1.0,
+                    # 最大的纠错次数，一般设为之AUTO
+                    "fuzziness": 2,
+                    # 不会被“模糊化”的初始字符数。这有助于减少必须检查的术语的数量。默认值为0。
+                    "prefix_length": 0,
+                    # 模糊查询将扩展到的最大项数。默认值为50
+                    "max_expansions": 100 
+                    # 是否支持模糊变换(ab→ba)。默认的是false
+                    transpositions:true 
+                }
+            }
+        }
+    }
     ```
 
   * <a id="ids">ID检索: `ids query`</a>
@@ -792,6 +815,8 @@ curl 'localhost:9200/get-together/_search' -d
 
     > match_phrase查询分析文本，并从分析文本中创建短语查询。
     > 类似 match 查询， match_phrase 查询首先将查询字符串解析成一个词项列表，然后对这些词项进行搜索，但只保留那些包含 全部 搜索词项，且 位置 与搜索词项相同的文档
+    >
+    > 短语检索：要求doc的该字段的值和你给定的值完全相同，顺序也不能变，所以它的精确度很高，但是召回率低。
 
     ```json
     GET /kibana_sample_data_logs/_search
@@ -803,6 +828,64 @@ curl 'localhost:9200/get-together/_search' -d
           }
         }
       }
+    }
+    GET /your_index/your_type/_search
+    {   
+      # 短语检索 
+      # 顺序的保证是通过 term position来保证的
+      # 精准度很高，但是召回率低
+      "query": {  
+          # 只有name字段中包含了完整的 白日梦 这个doc才算命中
+           # 不能是单个 ”白日“，也不能是单个的 “梦”，也不能是“白日xxx梦”
+           # 要求 短语相连，且顺序也不能变
+             "match_phrase": { 
+                 "name": "白日梦"
+         }
+      }
+    }
+    // slop提高召回率
+    GET /your_index/your_type/_search
+    {    
+       # 短语检索
+       "query": {
+            # 指定了slop就不再要求搜索term之间必须相邻，而是可以最多间隔slop距离。
+             # 在指定了slop参数的情况下，离关键词越近，移动的次数越少， relevance score 越高。
+             # match_phrase +  slop 和 proximity match 近似匹配作用类似。
+             # 平衡精准度和召回率。
+             "match_phrase": { 
+                 "address": "mill lane",
+            # 指定搜索文本中的几个term经过几次移动后可以匹配到一个doc
+                 "slop":2
+              } 
+      }
+    }
+    
+    // 混合使用match和match_phrase 平衡精准度和召回率
+    GET /your_index/your_type/_search
+    {    
+       # 混合使用match和match_phrase 平衡精准度和召回率
+       "query": { 
+          "bool": {  
+           "must":  {
+               # 全文检索虽然可以匹配到大量的文档，但是它不能控制词条之间的距离
+               # 可能i love world在doc1中距离很近，但是它却被ES排在结果集的后面
+               # 它的性能比match_phrase和proximity高
+               "match": {
+                 "title": "i love world" 
+               } 
+            },
+           "should": {
+                # 因为slop有个特性：词条之间间隔的越近，移动的次数越少 最终的得分就越高
+               # 于是可以借助match_phrase+slop感知term position的功能
+               # 实现为距离相近的doc贡献分数，让它们靠前排列
+               "match_phrase":{
+                   "title":{
+                       "query":"i love world",
+                       "slop":15
+                   }
+               }
+           }
+       }
     }
     ```
 
@@ -930,6 +1013,10 @@ curl 'localhost:9200/get-together/_search' -d
     GET /kibana_sample_data_logs/_search
     {
       "query": {
+         # 前缀匹配，相对于全文检索，前缀匹配是不会对前缀进行分词的。
+         # 而且每次匹配都会扫描整个倒排索引，直到扫描完一遍才会停下来
+         # 前缀搜索不会计算相关性得分所有的doc的得分都是1
+         # 前缀越短能匹配到的doc就越多，性能越不好
         "match_phrase_prefix": {
           "url": {
             "query": "www.elastic.co",
@@ -942,15 +1029,36 @@ curl 'localhost:9200/get-together/_search' -d
       ]
     }
     // 查询会先创建词组clever brown(即目标记录必须包含 clever且后面跟brown,clever和brown之间至少一个空格或tab),然后查询fo开头的项,比如fox,fog....然后添加到词组,组成新的词组clever brown fox,clever brown fog,...然后以match_phrese的方式去查找这些匹配这些新词组的文档记录
+    // 搜索推荐：match_phrase_prefix，最终实现的效果类似于百度搜索，当用户输入一个词条后，将其它符合条件的词条的选项推送出来。
+    GET /your_index/your_type/_search
+    {    
+       "query": {
+          # 前缀匹配（关键字）
+          "match_phrase_prefix" : {
+            "message" : {
+               # 比如你搜索关注白日梦，经过分词器处理后会得到最后一个词是：“白日梦”
+                # 然后他会拿着白日梦再发起一次搜索，于是你就可能搜到下面的内容：
+                    # “关注白日梦的微信公众号”
+               # ”关注白日梦的圈子“
+                    "query" : "关注白日梦",
+                    # 指定前缀最多匹配多少个term，超过这个数量就不在倒排索引中检索了，提升性能
+                    "max_expansions" : 10,
+                    # 提高召回率，使用slop调整term persition，贡献得分
+                    "slop":10
+                }
+           } 
+      }
+    }
     ```
 
   * <a id="multi_match">多字段匹配检索: `multi_match query`</a>
 
     > The way the `multi_match` query is executed internally depends on the `type` parameter, which can be set to:
     >
-    > | `best_fields`   | (**default**) Finds documents which match any field, but uses the `_score` from the best field. See [`best_fields`](https://www.elastic.co/guide/en/elasticsearch/reference/7.12/query-dsl-multi-match-query.html#type-best-fields). |
+    > | 参数            | 说明                                                         |
     > | --------------- | ------------------------------------------------------------ |
-    > | `most_fields`   | Finds documents which match any field and combines the `_score` from each field. See [`most_fields`](https://www.elastic.co/guide/en/elasticsearch/reference/7.12/query-dsl-multi-match-query.html#type-most-fields). |
+    > | `best_fields`   | (**default**) Finds documents which match any field, but uses the `_score` from the best field. See [`best_fields`](https://www.elastic.co/guide/en/elasticsearch/reference/7.12/query-dsl-multi-match-query.html#type-best-fields).优先返回某个field匹配到更多关键字的doc。 |
+    > | `most_fields`   | Finds documents which match any field and combines the `_score` from each field. See [`most_fields`](https://www.elastic.co/guide/en/elasticsearch/reference/7.12/query-dsl-multi-match-query.html#type-most-fields).优先返回有更多的field匹配到你给定的关键字的doc。most_fields不支持使用`minimum_should_match`去长尾。 |
     > | `cross_fields`  | Treats fields with the same `analyzer` as though they were one big field. Looks for each word in **any** field. See [`cross_fields`](https://www.elastic.co/guide/en/elasticsearch/reference/7.12/query-dsl-multi-match-query.html#type-cross-fields). |
     > | `phrase`        | Runs a `match_phrase` query on each field and uses the `_score` from the best field. See [`phrase` and `phrase_prefix`](https://www.elastic.co/guide/en/elasticsearch/reference/7.12/query-dsl-multi-match-query.html#type-phrase). |
     > | `phrase_prefix` | Runs a `match_phrase_prefix` query on each field and uses the `_score` from the best field. See [`phrase` and `phrase_prefix`](https://www.elastic.co/guide/en/elasticsearch/reference/7.12/query-dsl-multi-match-query.html#type-phrase). |
@@ -991,6 +1099,19 @@ curl 'localhost:9200/get-together/_search' -d
         "url",
          "re*"
       ]
+    }
+    // cross_fields
+    GET /your_index/your_type/_search
+    {    
+        "query": { 
+           "multi_match":{
+               "query":"golang java",
+                # cross_fields 要求golang：必须在title或者在content中出现
+                # cross_fields 要求java：必须在title或者在content中出现
+               "type":"cross_fields",
+               "fields":["title","content"]
+           }
+        }
     }
     ```
 
@@ -1156,6 +1277,28 @@ curl 'localhost:9200/get-together/_search' -d
           "boost": 1.2
         }
       }
+    }
+    
+    GET /your_index/your_type/_search
+    {    
+      "query": {
+            "function_score": {
+                "query": { 
+                "match": {
+                 "query":"es"
+                 } 
+           },
+           “field_value_factor”:{
+                  "field":"star",
+                  "modifier":"log1p",
+                  # 使用factor将star字段对权重的影响降低成1/10
+                  # newScore = oldScore + log( 1 + star*factor )
+            "factor":0.1
+                }
+                "boost_mode":"multiply",
+          "maxboost":3
+            }
+        }
     }
     ```
 
