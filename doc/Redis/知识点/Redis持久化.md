@@ -1,3 +1,12 @@
+---
+title: Redis持久化
+date: 2021-05-24 23:33:33
+tags: 
+- Redis
+- 持久化
+categories: Redis
+---
+
 ### Redis持久化
 
 #### RDB(Redis DataBase)

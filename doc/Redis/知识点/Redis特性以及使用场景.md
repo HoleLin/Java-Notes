@@ -1,3 +1,12 @@
+---
+title:  Redis特性以及使用场景
+date: 2021-05-24 23:33:33
+tags: 
+- Redis
+- 数据结构
+categories: Redis
+---
+
 ### Redis特性以及使用场景
 
 #### Redis的特性

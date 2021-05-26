@@ -1,3 +1,12 @@
+---
+title: Redis复制
+date: 2021-05-24 23:33:33
+tags: 
+- Redis
+- 复制
+categories: Redis
+---
+
 ### Redis复制
 
 #### **建立复制** 

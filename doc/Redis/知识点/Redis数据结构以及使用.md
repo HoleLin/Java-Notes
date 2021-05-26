@@ -1,3 +1,11 @@
+---
+title: Redis数据结构以及使用场景
+date: 2021-05-24 23:33:33
+tags: 
+- Redis
+- 数据结构
+categories: Redis
+---
 ### Redis数据结构以及使用场景
 
 #### **数据结构和内部编码**
