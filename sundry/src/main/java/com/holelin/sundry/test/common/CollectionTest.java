@@ -1,4 +1,4 @@
-package com.holelin.sundry.common;
+package com.holelin.sundry.test.common;
 
 /**
  * @Description:

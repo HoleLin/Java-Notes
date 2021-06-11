@@ -1,4 +1,4 @@
-package com.holelin.sundry;
+package com.holelin.sundry.test;
 
 
 import lombok.Data;

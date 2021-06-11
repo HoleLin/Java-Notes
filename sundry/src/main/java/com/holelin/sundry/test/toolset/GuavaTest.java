@@ -1,4 +1,4 @@
-package com.holelin.sundry.toolset;
+package com.holelin.sundry.test.toolset;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;

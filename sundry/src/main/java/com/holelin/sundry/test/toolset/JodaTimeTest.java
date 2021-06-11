@@ -1,4 +1,4 @@
-package com.holelin.sundry.toolset;
+package com.holelin.sundry.test.toolset;
 
 import org.joda.time.DateTime;
 

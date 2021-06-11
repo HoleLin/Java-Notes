@@ -1,4 +1,4 @@
-package com.holelin.sundry;
+package com.holelin.sundry.test;
 
 /**
  * 描述: Twitter的分布式自增ID雪花算法snowflake (Java版)

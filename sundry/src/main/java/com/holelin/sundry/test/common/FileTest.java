@@ -1,4 +1,4 @@
-package com.holelin.sundry.common;
+package com.holelin.sundry.test.common;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
