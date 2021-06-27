@@ -22,4 +22,12 @@ public class Test {
         }
         System.out.println(sets.size());
     }
+
+    private static String A = "A";
+    private static String B = "B";
+    public static void test1(){
+        if (A.equals(B)) {
+            
+        }
+    }
 }
