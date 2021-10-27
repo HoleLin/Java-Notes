@@ -40,6 +40,7 @@
         <HikariCP.version>3.4.5</HikariCP.version>
         <elasticsearch.client.version>7.12.0</elasticsearch.client.version>
         <fastjson.version>1.2.76</fastjson.version>
+        <flowable.version>6.6.0</flowable.version>
     </properties>
     <dependencies>
         <dependency>
@@ -170,6 +171,11 @@
                 <artifactId>fastjson</artifactId>
                 <version>${fastjson.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.flowable</groupId>
+                <artifactId>flowable-spring-boot-starter</artifactId>
+                <version>${flowable.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
     <modules>
@@ -178,6 +184,9 @@
         <module>redis</module>
         <module>sundry</module>
         <module>elasticsearch</module>
+        <module>business-automation</module>
+        <module>business-automation/flowable</module>
+        <module>business-automation/activiti</module>
     </modules>
     <build>
         <pluginManagement><!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) -->
