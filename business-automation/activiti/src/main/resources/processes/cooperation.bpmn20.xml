@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:activiti="http://activiti.org/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsd="http://www.w3.org/2001/XMLSchema" id="Definitions_0rxfslb" name="" targetNamespace="http://bpmn.io/schema/bpmn" exporter="bpmn-js (https://demo.bpmn.io)" exporterVersion="8.8.2">
+  <process id="cooperation" isExecutable="true">
+    <startEvent id="start_event">
+      <outgoing>Flow_start_event</outgoing>
+    </startEvent>
+    <sequenceFlow id="Flow_start_event" sourceRef="start_event" targetRef="Gateway_start_event" />
+    <parallelGateway id="Gateway_start_event" name="Gateway_start_event">
+      <incoming>Flow_start_event</incoming>
+      <outgoing>Flow_start_Alpha_cpu_task</outgoing>
+      <outgoing>Flow_start_Beta_cpu_task</outgoing>
+    </parallelGateway>
+    <sequenceFlow id="Flow_start_Alpha_cpu_task" sourceRef="Gateway_start_event" targetRef="Activity_start_Alpha_cpu_task" />
+    <sequenceFlow id="Flow_start_Beta_cpu_task" sourceRef="Gateway_start_event" targetRef="Activity_start_surigi_cpu_task" />
+    <exclusiveGateway id="Gateway_Alpha_cpu_task" name="Gateway_Alpha_cpu_task">
+      <incoming>Flow_1augnr2</incoming>
+      <outgoing>Flow_failed_Alpha_cpu</outgoing>
+      <outgoing>Flow_succes_Alpha_cpu</outgoing>
+    </exclusiveGateway>
+    <sequenceFlow id="Flow_1augnr2" sourceRef="Activity_start_Alpha_cpu_task" targetRef="Gateway_Alpha_cpu_task" />
+    <sequenceFlow id="Flow_failed_Alpha_cpu" sourceRef="Gateway_Alpha_cpu_task" targetRef="Activity_Alpha_cpu_error">
+      <conditionExpression xsi:type="tFormalExpression">${AlphaCpuCode!=200}</conditionExpression>
+    </sequenceFlow>
+    <endEvent id="Event_0ngzmbg">
+      <incoming>Flow_1r3vd48</incoming>
+      <incoming>Flow_0nle22b</incoming>
+      <incoming>Flow_1kvzfye</incoming>
+      <incoming>Flow_0mckvlm</incoming>
+      <incoming>Flow_0yvc5hf</incoming>
+    </endEvent>
+    <sequenceFlow id="Flow_1r3vd48" sourceRef="Activity_Alpha_cpu_error" targetRef="Event_0ngzmbg" />
+    <sequenceFlow id="Flow_succes_Alpha_cpu" sourceRef="Gateway_Alpha_cpu_task" targetRef="Activity_start_Alpha_gpu_task" name="Flow_succes_Alpha_cpu">
+      <conditionExpression xsi:type="tFormalExpression">${AlphaCpuCode==200}</conditionExpression>
+    </sequenceFlow>
+    <exclusiveGateway id="Gateway_Beta_cpu_task" name="Gateway_Beta_cpu_task">
+      <incoming>Flow_12pwp21</incoming>
+      <outgoing>Flow_success_Beta_cpu</outgoing>
+      <outgoing>Flow_failed_Beta_cpu</outgoing>
+    </exclusiveGateway>
+    <sequenceFlow id="Flow_12pwp21" sourceRef="Activity_start_surigi_cpu_task" targetRef="Gateway_Beta_cpu_task" />
+    <sequenceFlow id="Flow_success_Beta_cpu" sourceRef="Gateway_Beta_cpu_task" targetRef="Activity_start_surigi_gpu_task">
+      <conditionExpression xsi:type="tFormalExpression">${BetaCpuCode==200}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="Flow_failed_Beta_cpu" sourceRef="Gateway_Beta_cpu_task" targetRef="Activity_Beta_cpu_error">
+      <conditionExpression xsi:type="tFormalExpression">${BetaCpuCode!=200}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="Flow_1j878yb" sourceRef="Gateway_Beta_gpu_task" targetRef="Gateway_finish_detection">
+      <conditionExpression xsi:type="tFormalExpression">${BetaGpuCode==200}</conditionExpression>
+    </sequenceFlow>
+    <parallelGateway id="Gateway_finish_detection" name="Gateway_finish_detection">
+      <incoming>Flow_1j878yb</incoming>
+      <incoming>SequenceFlow_0rj2vgp</incoming>
+      <outgoing>Flow_1108g2u</outgoing>
+    </parallelGateway>
+    <sequenceFlow id="Flow_1108g2u" sourceRef="Gateway_finish_detection" targetRef="Activity_assembly" />
+    <exclusiveGateway id="Gateway_Alpha_gpu_task">
+      <incoming>Flow_10jxni6</incoming>
+      <outgoing>Flow_0nxpo9t</outgoing>
+      <outgoing>SequenceFlow_0rj2vgp</outgoing>
+    </exclusiveGateway>
+    <sequenceFlow id="Flow_10jxni6" sourceRef="Activity_start_Alpha_gpu_task" targetRef="Gateway_Alpha_gpu_task" />
+    <sequenceFlow id="Flow_0nxpo9t" sourceRef="Gateway_Alpha_gpu_task" targetRef="Activity_Alpha_gpu_error">
+      <conditionExpression xsi:type="tFormalExpression">${AlphaGpuCode!=200}</conditionExpression>
+    </sequenceFlow>
+    <exclusiveGateway id="Gateway_Beta_gpu_task" name="Gateway_Beta_gpu_task">
+      <incoming>Flow_031sdvr</incoming>
+      <outgoing>Flow_1j878yb</outgoing>
+      <outgoing>Flow_0j4l6tu</outgoing>
+    </exclusiveGateway>
+    <sequenceFlow id="Flow_031sdvr" sourceRef="Activity_start_surigi_gpu_task" targetRef="Gateway_Beta_gpu_task" />
+    <sequenceFlow id="Flow_0j4l6tu" sourceRef="Gateway_Beta_gpu_task" targetRef="Activity_Beta_gpu_error">
+      <conditionExpression xsi:type="tFormalExpression">${BetaGpuCode!=200}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="Flow_0nle22b" sourceRef="Activity_assembly" targetRef="Event_0ngzmbg" />
+    <sequenceFlow id="Flow_1kvzfye" sourceRef="Activity_Alpha_gpu_error" targetRef="Event_0ngzmbg" />
+    <sequenceFlow id="Flow_0mckvlm" sourceRef="Activity_Beta_gpu_error" targetRef="Event_0ngzmbg" />
+    <sequenceFlow id="Flow_0yvc5hf" sourceRef="Activity_Beta_cpu_error" targetRef="Event_0ngzmbg" />
+    <userTask id="Activity_start_Alpha_cpu_task" name="AlphaCpuTask">
+      <extensionElements>
+        <activiti:taskListener delegateExpression="${AlphaCpuCreateListener}" event="create" />
+      </extensionElements>
+      <incoming>Flow_start_Alpha_cpu_task</incoming>
+      <outgoing>Flow_1augnr2</outgoing>
+    </userTask>
+    <userTask id="Activity_start_surigi_cpu_task" name="BetaCpuTask">
+      <extensionElements>
+        <activiti:taskListener delegateExpression="${BetaCpuCreateListener}" event="create" />
+      </extensionElements>
+      <incoming>Flow_start_Beta_cpu_task</incoming>
+      <outgoing>Flow_12pwp21</outgoing>
+    </userTask>
+    <userTask id="Activity_start_Alpha_gpu_task" name="AlphaGpuTask">
+      <extensionElements>
+        <activiti:taskListener delegateExpression="${AlphaGpuCreateListener}" event="create" />
+      </extensionElements>
+      <incoming>Flow_succes_Alpha_cpu</incoming>
+      <outgoing>Flow_10jxni6</outgoing>
+    </userTask>
+    <userTask id="Activity_start_surigi_gpu_task" name="BetaGpuTask">
+      <extensionElements>
+        <activiti:taskListener delegateExpression="${BetaGpuCreateListener}" event="create" />
+      </extensionElements>
+      <incoming>Flow_success_Beta_cpu</incoming>
+      <outgoing>Flow_031sdvr</outgoing>
+    </userTask>
+    <serviceTask id="Activity_Alpha_cpu_error" name="AlphaCpuError" activiti:delegateExpression="${errorService}">
+      <incoming>Flow_failed_Alpha_cpu</incoming>
+      <outgoing>Flow_1r3vd48</outgoing>
+    </serviceTask>
+    <serviceTask id="Activity_Alpha_gpu_error" name="AlphaGpuError" activiti:delegateExpression="${errorService}">
+      <incoming>Flow_0nxpo9t</incoming>
+      <outgoing>Flow_1kvzfye</outgoing>
+    </serviceTask>
+    <serviceTask id="Activity_assembly" name="AssemblyResonse" activiti:delegateExpression="${assemblyResponseService}">
+      <incoming>Flow_1108g2u</incoming>
+      <outgoing>Flow_0nle22b</outgoing>
+    </serviceTask>
+    <serviceTask id="Activity_Beta_gpu_error" name="BetaGpuError" activiti:delegateExpression="${errorService}">
+      <incoming>Flow_0j4l6tu</incoming>
+      <outgoing>Flow_0mckvlm</outgoing>
+    </serviceTask>
+    <serviceTask id="Activity_Beta_cpu_error" name="BetaCpuError" activiti:delegateExpression="${errorService}">
+      <incoming>Flow_failed_Beta_cpu</incoming>
+      <outgoing>Flow_0yvc5hf</outgoing>
+    </serviceTask>
+    <sequenceFlow id="SequenceFlow_0rj2vgp" sourceRef="Gateway_Alpha_gpu_task" targetRef="Gateway_finish_detection">
+      <conditionExpression xsi:type="tFormalExpression">${AlphaGpuCode==200}</conditionExpression>
+    </sequenceFlow>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_cooperation">
+    <bpmndi:BPMNPlane id="BPMNPlane_cooperation" bpmnElement="cooperation">
+      <bpmndi:BPMNShape id="BPMNShape_start_event" bpmnElement="start_event">
+        <omgdc:Bounds x="152" y="452" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Gateway_start_event" bpmnElement="Gateway_start_event">
+        <omgdc:Bounds x="435" y="445" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Gateway_Alpha_cpu_task" bpmnElement="Gateway_Alpha_cpu_task" isMarkerVisible="true">
+        <omgdc:Bounds x="1075" y="265" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Gateway_Beta_cpu_task" bpmnElement="Gateway_Beta_cpu_task" isMarkerVisible="true">
+        <omgdc:Bounds x="1055" y="555" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Gateway_finish_detection" bpmnElement="Gateway_finish_detection">
+        <omgdc:Bounds x="1615" y="415" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Gateway_Alpha_gpu_task" bpmnElement="Gateway_Alpha_gpu_task" isMarkerVisible="true">
+        <omgdc:Bounds x="1615" y="265" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Gateway_Beta_gpu_task" bpmnElement="Gateway_Beta_gpu_task" isMarkerVisible="true">
+        <omgdc:Bounds x="1615" y="555" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Event_0ngzmbg" bpmnElement="Event_0ngzmbg">
+        <omgdc:Bounds x="2092" y="422" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_start_Alpha_cpu_task" bpmnElement="Activity_start_Alpha_cpu_task">
+        <omgdc:Bounds x="730" y="250" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_start_surigi_cpu_task" bpmnElement="Activity_start_surigi_cpu_task">
+        <omgdc:Bounds x="740" y="540" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_start_Alpha_gpu_task" bpmnElement="Activity_start_Alpha_gpu_task">
+        <omgdc:Bounds x="1310" y="250" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_start_surigi_gpu_task" bpmnElement="Activity_start_surigi_gpu_task">
+        <omgdc:Bounds x="1300" y="540" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_Alpha_gpu_error" bpmnElement="Activity_Alpha_gpu_error">
+        <omgdc:Bounds x="1850" y="250" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_assembly" bpmnElement="Activity_assembly">
+        <omgdc:Bounds x="1850" y="400" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_Beta_gpu_error" bpmnElement="Activity_Beta_gpu_error">
+        <omgdc:Bounds x="1850" y="540" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_Beta_cpu_error" bpmnElement="Activity_Beta_cpu_error">
+        <omgdc:Bounds x="1850" y="690" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_Alpha_cpu_error" bpmnElement="Activity_Alpha_cpu_error">
+        <omgdc:Bounds x="1850" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_start_event" bpmnElement="Flow_start_event">
+        <omgdi:waypoint x="188" y="470" />
+        <omgdi:waypoint x="435" y="470" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_start_Alpha_cpu_task" bpmnElement="Flow_start_Alpha_cpu_task">
+        <omgdi:waypoint x="460" y="445" />
+        <omgdi:waypoint x="460" y="290" />
+        <omgdi:waypoint x="730" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_start_Beta_cpu_task" bpmnElement="Flow_start_Beta_cpu_task">
+        <omgdi:waypoint x="460" y="495" />
+        <omgdi:waypoint x="460" y="580" />
+        <omgdi:waypoint x="740" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_1augnr2" bpmnElement="Flow_1augnr2">
+        <omgdi:waypoint x="830" y="290" />
+        <omgdi:waypoint x="1075" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_failed_Alpha_cpu" bpmnElement="Flow_failed_Alpha_cpu">
+        <omgdi:waypoint x="1100" y="265" />
+        <omgdi:waypoint x="1100" y="120" />
+        <omgdi:waypoint x="1850" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_1r3vd48" bpmnElement="Flow_1r3vd48">
+        <omgdi:waypoint x="1950" y="120" />
+        <omgdi:waypoint x="2110" y="120" />
+        <omgdi:waypoint x="2110" y="422" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_succes_Alpha_cpu" bpmnElement="Flow_succes_Alpha_cpu">
+        <omgdi:waypoint x="1125" y="290" />
+        <omgdi:waypoint x="1310" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_12pwp21" bpmnElement="Flow_12pwp21">
+        <omgdi:waypoint x="840" y="580" />
+        <omgdi:waypoint x="1055" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_success_Beta_cpu" bpmnElement="Flow_success_Beta_cpu">
+        <omgdi:waypoint x="1105" y="580" />
+        <omgdi:waypoint x="1300" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_failed_Beta_cpu" bpmnElement="Flow_failed_Beta_cpu">
+        <omgdi:waypoint x="1080" y="605" />
+        <omgdi:waypoint x="1080" y="730" />
+        <omgdi:waypoint x="1850" y="730" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_1j878yb" bpmnElement="Flow_1j878yb">
+        <omgdi:waypoint x="1640" y="555" />
+        <omgdi:waypoint x="1640" y="465" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_1108g2u" bpmnElement="Flow_1108g2u">
+        <omgdi:waypoint x="1665" y="440" />
+        <omgdi:waypoint x="1850" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_10jxni6" bpmnElement="Flow_10jxni6">
+        <omgdi:waypoint x="1410" y="290" />
+        <omgdi:waypoint x="1615" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_0nxpo9t" bpmnElement="Flow_0nxpo9t">
+        <omgdi:waypoint x="1665" y="290" />
+        <omgdi:waypoint x="1850" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_031sdvr" bpmnElement="Flow_031sdvr">
+        <omgdi:waypoint x="1400" y="580" />
+        <omgdi:waypoint x="1615" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_0j4l6tu" bpmnElement="Flow_0j4l6tu">
+        <omgdi:waypoint x="1665" y="580" />
+        <omgdi:waypoint x="1850" y="580" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_0nle22b" bpmnElement="Flow_0nle22b">
+        <omgdi:waypoint x="1950" y="440" />
+        <omgdi:waypoint x="2092" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_1kvzfye" bpmnElement="Flow_1kvzfye">
+        <omgdi:waypoint x="1950" y="290" />
+        <omgdi:waypoint x="2110" y="290" />
+        <omgdi:waypoint x="2110" y="422" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_0mckvlm" bpmnElement="Flow_0mckvlm">
+        <omgdi:waypoint x="1950" y="580" />
+        <omgdi:waypoint x="2110" y="580" />
+        <omgdi:waypoint x="2110" y="458" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_0yvc5hf" bpmnElement="Flow_0yvc5hf">
+        <omgdi:waypoint x="1950" y="730" />
+        <omgdi:waypoint x="2110" y="730" />
+        <omgdi:waypoint x="2110" y="458" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SequenceFlow_0rj2vgp_di" bpmnElement="SequenceFlow_0rj2vgp">
+        <omgdi:waypoint x="1640" y="315" />
+        <omgdi:waypoint x="1640" y="415" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

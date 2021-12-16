@@ -1,0 +1,6 @@
+logging:
+  level:
+    logback: info
+  file:
+    path: logs/activiti
+    name: activiti

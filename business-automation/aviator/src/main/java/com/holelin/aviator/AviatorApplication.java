@@ -1,16 +1,13 @@
-package cn.holelin.activiti;
+package com.holelin.aviator;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-
 @SpringBootApplication
-public class ActivitiApplication {
+public class AviatorApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(ActivitiApplication.class, args);
+        SpringApplication.run(AviatorApplication.class, args);
     }
 
 }
