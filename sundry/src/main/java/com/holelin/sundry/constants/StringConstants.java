@@ -14,4 +14,6 @@ public class StringConstants {
 
     public static char CHAR_ZERO = '0';
 
+    public static char SLASH = '/';
+
 }
