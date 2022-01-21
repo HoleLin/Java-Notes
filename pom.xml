@@ -223,6 +223,7 @@
         <module>business-automation/activiti</module>
         <module>business-automation/aviator</module>
         <module>business-automation/freemarker</module>
+        <module>Algorithms</module>
     </modules>
     <build>
         <pluginManagement><!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) -->

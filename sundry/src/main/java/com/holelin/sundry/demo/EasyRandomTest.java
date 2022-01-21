@@ -26,5 +26,6 @@ public class EasyRandomTest {
         Employee employee = generator.nextObject(Employee.class);
 
         System.out.println(employee);
+        System.out.println(Math.abs(-2147483648));
     }
 }
