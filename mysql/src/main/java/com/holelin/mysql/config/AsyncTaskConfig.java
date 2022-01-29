@@ -1,4 +1,4 @@
-package com.holelin.mysql.util;
+package com.holelin.mysql.config;
 
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.context.annotation.Bean;

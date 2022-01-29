@@ -1,4 +1,4 @@
-package com.holelin.mysql.dao;
+package com.holelin.mysql.jpa.dao;
 
 
 import com.holelin.mysql.entity.AnalysisDataFromOneSelf;

@@ -1,17 +1,15 @@
 package com.holelin.mysql.service.impl;
 
-import com.holelin.mysql.dao.IUserDAO;
+import com.holelin.mysql.jpa.dao.IUserDAO;
 import com.holelin.mysql.entity.User;
-import com.holelin.mysql.service.IUserService;
+import com.holelin.mysql.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -27,7 +25,7 @@ import java.util.UUID;
 @Service
 @Slf4j
 @Transactional(isolation = Isolation.REPEATABLE_READ,propagation = Propagation.REQUIRES_NEW )
-public class UserServiceImpl implements IUserService {
+public class UserServiceImpl implements UserService {
 
 
     @Autowired

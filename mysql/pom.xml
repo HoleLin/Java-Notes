@@ -11,7 +11,6 @@
     <artifactId>mysql</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>mysql</name>
-    <description>Demo project for Spring Boot</description>
 
     <properties>
         <java.version>1.8</java.version>
@@ -41,6 +40,10 @@
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-boot-starter</artifactId>
+        </dependency>
     </dependencies>
     <profiles>
         <profile>
@@ -56,10 +59,6 @@
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
             <plugin>
                 <groupId>cn.smallbun.screw</groupId>
                 <artifactId>screw-maven-plugin</artifactId>
@@ -86,7 +85,7 @@
                     <!--driver-->
                     <driverClassName>com.mysql.cj.jdbc.Driver</driverClassName>
                     <!--jdbc url-->
-                    <jdbcUrl>jdbc:mysql://101.37.160.249:3306/mysql_test?useUnicode=true&amp;characterEncoding=utf-8&amp;serverTimezone=UTC&amp;useSSL=false</jdbcUrl>
+                    <jdbcUrl>jdbc:mysql://localhost:3306/mysql_test?useUnicode=true&amp;characterEncoding=utf-8&amp;serverTimezone=UTC&amp;useSSL=false</jdbcUrl>
                     <!--生成文件类型-->
                     <fileType>WORD</fileType>
                     <!--文件输出目录-->

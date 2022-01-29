@@ -1,8 +1,8 @@
-package com.holelin.mysql.jpa.entity;
+package com.holelin.mysql.entity;
 
 import javax.persistence.*;
 
-@Table(catalog = "subscribe_data")
+@Table(name = "subscribe_data")
 @Entity
 public class SubscribeData {
     @Id

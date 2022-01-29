@@ -1,6 +1,6 @@
 package com.holelin.mysql.controller;
 
-import com.holelin.mysql.service.IUserService;
+import com.holelin.mysql.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,11 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("user")
 public class UserController {
     @Autowired
-    private IUserService mIUserService;
+    private UserService mUserService;
 
     @GetMapping
     public void testSave() {
-        mIUserService.testSave();
+        mUserService.testSave();
     }
 
 }

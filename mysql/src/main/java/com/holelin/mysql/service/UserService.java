@@ -10,7 +10,7 @@ package com.holelin.mysql.service;
  * @Version: 1.0
  */
 
-public interface IUserService {
+public interface UserService {
     /**
      * 测试
      * Batch update returned unexpected row count from update [0]; actual row count

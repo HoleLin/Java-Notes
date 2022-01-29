@@ -17,34 +17,44 @@
     <name>Java-Notes</name>
 
     <properties>
-        <springboot.version>2.5.6</springboot.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <springfox.swagger.version>2.2.2</springfox.swagger.version>
+        <!-- Spring       -->
+        <springboot.version>2.5.6</springboot.version>
         <spring.kafka.version>2.5.5.RELEASE</spring.kafka.version>
-        <commons.collections4.version>4.1</commons.collections4.version>
-        <commons.lang3.version>3.10</commons.lang3.version>
+        <!-- 接口文档       -->
         <springfox.swagger2.version>2.9.2</springfox.swagger2.version>
         <knife4j.springboot.starter.version>2.0.4</knife4j.springboot.starter.version>
+        <springfox.swagger.version>2.2.2</springfox.swagger.version>
+        <!-- 测试   -->
+        <junit-jupiter.version>5.3.1</junit-jupiter.version>
+        <!-- 工具类       -->
         <hutool.all.version>5.3.10</hutool.all.version>
         <joda.time.version>2.10.6</joda.time.version>
         <joda.convert.version>2.2.1</joda.convert.version>
         <javafaker.version>1.0.2</javafaker.version>
-        <junit-jupiter.version>5.3.1</junit-jupiter.version>
         <easyexcel.version>2.1.6</easyexcel.version>
         <zxing.version>3.3.0</zxing.version>
         <guava.version>30.0-jre</guava.version>
         <jeasy.version>4.0.0</jeasy.version>
-        <!--数据库文档核心依赖-->
-        <screw.version>1.0.3</screw.version>
+        <commons.collections4.version>4.1</commons.collections4.version>
+        <commons.lang3.version>3.10</commons.lang3.version>
+        <!--  连接池      -->
         <HikariCP.version>3.4.5</HikariCP.version>
         <elasticsearch.client.version>7.12.0</elasticsearch.client.version>
         <fastjson.version>1.2.76</fastjson.version>
+        <!--   工作流相关     -->
         <flowable.version>6.6.0</flowable.version>
         <aviator.version>5.2.7</aviator.version>
+        <!-- 数据库相关    -->
+        <!--数据库文档核心依赖-->
+        <screw.version>1.0.3</screw.version>
+        <mybatis.plus.version>3.5.1</mybatis.plus.version>
         <flyway.version>8.0.2</flyway.version>
+        <!--  DICOM相关    -->
         <commons-net.version>3.8.0</commons-net.version>
+        <dcm4che.version>5.23.3</dcm4che.version>
     </properties>
     <dependencies>
         <dependency>
@@ -210,6 +220,39 @@
                 <artifactId>spring-boot-starter-aop</artifactId>
                 <version>${springboot.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-websocket</artifactId>
+                <version>${springboot.version}</version>
+            </dependency>
+            <!--    Dicom处理相关        -->
+            <dependency>
+                <groupId>org.dcm4che</groupId>
+                <artifactId>dcm4che-core</artifactId>
+                <version>${dcm4che.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.dcm4che</groupId>
+                <artifactId>dcm4che-net</artifactId>
+                <version>${dcm4che.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.dcm4che.tool</groupId>
+                <artifactId>dcm4che-tool-common</artifactId>
+                <version>${dcm4che.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.dcm4che</groupId>
+                <artifactId>dcm4che-imageio</artifactId>
+                <version>${dcm4che.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-boot-starter</artifactId>
+                <version>${mybatis.plus.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
     <modules>
@@ -223,7 +266,9 @@
         <module>business-automation/activiti</module>
         <module>business-automation/aviator</module>
         <module>business-automation/freemarker</module>
-        <module>Algorithms</module>
+        <module>algorithms</module>
+        <module>websocket</module>
+        <module>dicom</module>
     </modules>
     <build>
         <pluginManagement><!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) -->
@@ -270,7 +315,20 @@
         <repository>
             <id>alimaven</id>
             <name>aliyun maven</name>
-            <url>http://maven.aliyun.com/nexus/content/groups/public/</url>
+            <url>https://maven.aliyun.com/repository/public/</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+                <checksumPolicy>fail</checksumPolicy>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>dcm4che</id>
+            <name>dcm4che</name>
+            <url>https://www.dcm4che.org/maven2/</url>
             <releases>
                 <enabled>true</enabled>
             </releases>
