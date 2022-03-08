@@ -6,6 +6,8 @@
         <groupId>org.holelin</groupId>
         <artifactId>Java-Notes</artifactId>
         <version>1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+
     </parent>
     <groupId>com.holelin</groupId>
     <artifactId>elasticsearch</artifactId>
