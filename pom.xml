@@ -9,7 +9,7 @@
         <version>2.5.6</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>org.holelin</groupId>
+    <groupId>cn.holelin</groupId>
     <artifactId>Java-Notes</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
@@ -269,6 +269,7 @@
         <module>algorithms</module>
         <module>websocket</module>
         <module>dicom</module>
+        <module>security</module>
     </modules>
     <build>
         <plugins>
