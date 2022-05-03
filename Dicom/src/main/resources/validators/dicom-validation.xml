@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IOD xml-space="preserved">
+    <DataElement keyword="PatientPosition" tag="00185100" vr="CS" type="1" vm="1">
+        <Value>HFS</Value>
+        <Value>FFS</Value>
+    </DataElement>
+    <DataElement keyword="Modality" tag="00080060" vr="CS" type="1" vm="1">
+        <Value>CT</Value>
+    </DataElement>
+    <DataElement keyword="Rows" tag="00280010" vr="US" type="1">
+        <Value>512</Value>
+    </DataElement>
+    <DataElement keyword="Columns" tag="00280011" vr="US" type="1">
+        <Value>512</Value>
+    </DataElement>
+    <DataElement keyword="SliceThickness" tag="00180050" vr="DS" type="1" vm="1">
+    </DataElement>
+</IOD>
