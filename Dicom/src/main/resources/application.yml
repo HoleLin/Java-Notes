@@ -18,3 +18,8 @@ spring:
     user: ${spring.datasource.username}
     password: ${spring.datasource.password}
     create-schemas: true
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+  mapper-locations:
+    - classpath:/mapping/*Mapping.xml

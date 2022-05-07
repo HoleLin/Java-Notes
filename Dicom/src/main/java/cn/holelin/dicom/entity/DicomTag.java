@@ -1,6 +1,8 @@
 package cn.holelin.dicom.entity;
 
-import cn.holelin.dicom.enums.DicomTagValueTypeEnum;
+import lombok.Data;
+
+import java.time.LocalDateTime;
 
 /**
  * @Description:
@@ -11,29 +13,53 @@ import cn.holelin.dicom.enums.DicomTagValueTypeEnum;
  * @UpdateRemark: 修改内容
  * @Version: 1.0
  */
-
+@Data
 public class DicomTag {
     private Integer id;
     /**
      * Tag标识
      */
-    private String flag;
+    private String tagName;
+
     /**
      * 标准坐标
      */
     private String coordinates;
+
     /**
-     * 是否需要校验
+     * org.dcm4che3.data.Tag类中对应的Tag值
      */
-    private Boolean needCheck;
+    private Long tagValue;
+
+    /**
+     * 是否必须存在
+     */
+    private Boolean isMust;
+
+    /**
+     * 是否需要脱敏
+     */
+    private Boolean isNeedDesensitized;
+
+    /**
+     * 是否需要校验Tag值的合法性
+     */
+    private Boolean isNeedCheck;
+
     /**
      * 值的类型
      *
-     * @see DicomTagValueTypeEnum
+     * @see org.dcm4che3.data.VR
      */
-    private String valueType;
+    private String vr;
+
+    private String vm;
+
     /**
      * 描述
      */
     private String description;
+
+    private LocalDateTime createdTime;
+
 }
