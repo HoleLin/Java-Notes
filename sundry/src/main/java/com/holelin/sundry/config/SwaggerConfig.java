@@ -1,4 +1,4 @@
-package com.holelin.sundry.controller.config;
+package com.holelin.sundry.config;
 
 import com.github.xiaoymin.knife4j.spring.annotations.EnableKnife4j;
 import com.google.common.collect.Lists;

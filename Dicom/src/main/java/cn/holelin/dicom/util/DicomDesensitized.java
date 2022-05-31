@@ -1,6 +1,6 @@
 package cn.holelin.dicom.util;
 
-import cn.holelin.dicom.entity.DicomFrame;
+import cn.holelin.dicom.domain.DicomImagePretreatment;
 import cn.holelin.dicom.entity.DicomTag;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.text.CharSequenceUtil;
@@ -39,7 +39,7 @@ public class DicomDesensitized {
      * @param dicomFrame dicom对象
      * @param dicomTags 需要脱敏的Tag列表
      */
-    public static void defaultDesensitization(DicomFrame dicomFrame,
+    public static void defaultDesensitization(DicomImagePretreatment dicomFrame,
                                               List<DicomTag> dicomTags) throws IOException {
         // 若dicomFrame对象为空或者没有需要脱敏的Tag则直接跳过
         if (Objects.isNull(dicomFrame) || CollectionUtil.isEmpty(dicomTags)) {

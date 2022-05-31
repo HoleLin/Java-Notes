@@ -34,4 +34,10 @@ public interface DicomTagMapper {
      * @return
      */
     List<DicomTag> queryNeedCheck();
+
+    /**
+     *
+     * @return
+     */
+    List<DicomTag> queryNeedStore();
 }

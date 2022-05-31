@@ -1,23 +1,12 @@
 package cn.holelin.dicom.util.validator;
 
-import cn.holelin.dicom.entity.DicomFrame;
-import cn.holelin.dicom.entity.DicomTag;
-import cn.holelin.dicom.entity.DicomTagDict;
-import cn.holelin.dicom.mapper.DicomTagDictMapper;
-import cn.holelin.dicom.mapper.DicomTagMapper;
+import cn.holelin.dicom.domain.DicomImagePretreatment;
 import cn.hutool.core.collection.CollUtil;
 import org.dcm4che3.data.Attributes;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
 
-import javax.annotation.PostConstruct;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * @Description:
@@ -40,7 +29,7 @@ public class DbValidator implements Validator {
     }
 
     @Override
-    public Boolean validated(DicomFrame dicomFrame) {
+    public Boolean validated(DicomImagePretreatment dicomFrame) {
         final Attributes attributes = dicomFrame.getAttributes();
         if (Objects.isNull(attributes)) {
             return false;

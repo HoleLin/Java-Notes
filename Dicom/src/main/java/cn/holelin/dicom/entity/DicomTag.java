@@ -45,6 +45,10 @@ public class DicomTag {
      * 是否需要校验Tag值的合法性
      */
     private Boolean isNeedCheck;
+    /**
+     * 当前字段是否需要存储到数据库
+     */
+    private Boolean isNeedStore;
 
     /**
      * 值的类型

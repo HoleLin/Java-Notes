@@ -19,4 +19,9 @@
         from dicom_tag
         where is_need_check = 1
     </select>
+    <select id="queryNeedStore" resultType="cn.holelin.dicom.entity.DicomTag">
+        select *
+        from dicom_tag
+        where is_need_store = 1
+    </select>
 </mapper>

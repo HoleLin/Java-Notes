@@ -1,6 +1,6 @@
 package cn.holelin.dicom.util.validator;
 
-import cn.holelin.dicom.entity.DicomFrame;
+import cn.holelin.dicom.domain.DicomImagePretreatment;
 
 /**
  * @Description: 验证器
@@ -18,6 +18,6 @@ public interface Validator {
      * @param dicomFrame dicom对象
      * @return true--验证通过,false--验证不通过
      */
-    Boolean validated(DicomFrame dicomFrame);
+    Boolean validated(DicomImagePretreatment dicomFrame);
 
 }

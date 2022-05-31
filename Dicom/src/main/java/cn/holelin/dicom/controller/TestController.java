@@ -1,11 +1,12 @@
 package cn.holelin.dicom.controller;
 
-import cn.holelin.dicom.entity.DicomFrame;
+import cn.holelin.dicom.domain.DicomImagePretreatment;
 import cn.holelin.dicom.entity.DicomTag;
 import cn.holelin.dicom.entity.DicomTagDict;
 import cn.holelin.dicom.mapper.DicomTagDictMapper;
 import cn.holelin.dicom.mapper.DicomTagMapper;
 import cn.holelin.dicom.util.DicomDesensitized;
+import cn.holelin.dicom.util.DicomHelper;
 import cn.holelin.dicom.util.DicomParse;
 import cn.holelin.dicom.util.validator.XmlValidator;
 import cn.hutool.core.collection.CollUtil;
@@ -32,8 +33,9 @@ import java.util.stream.Stream;
 @RestController
 @RequestMapping("/test")
 public class TestController {
-    private static String fileDirPath = "classpath:dicom/xxx/";
-    private static String filePath = "classpath:dicom/xxx.dcm";
+    private static String fileDirPath = "classpath:dicom/3569/";
+    private static String realDirPath = "/Users/holelin/Windows Share/3569/";
+    private static String filePath = "classpath:dicom/16354154267220.dcm";
     @Autowired
     private DicomTagMapper dicomTagMapper;
     @Autowired
@@ -46,7 +48,7 @@ public class TestController {
     public void desensitized() throws IOException {
         final File dicomFile = ResourceUtils.getFile(filePath);
         final List<DicomTag> dicomTags = dicomTagMapper.queryNeedDesensitized();
-        DicomFrame dicomFrame = new DicomFrame();
+        DicomImagePretreatment dicomFrame = new DicomImagePretreatment();
         dicomFrame.setFile(dicomFile);
         dicomFrame.setMetaData(DicomParse.parseMetaData(dicomFile));
         dicomFrame.setAttributes(DicomParse.parseAttributes(dicomFile));
@@ -61,17 +63,20 @@ public class TestController {
 
     @GetMapping("/parse")
     public void parse() throws IOException {
-        List<DicomFrame> list = new ArrayList<>();
-        final File file = ResourceUtils.getFile(fileDirPath);
+        List<DicomImagePretreatment> list = new ArrayList<>();
+//        final File file = ResourceUtils.getFile(fileDirPath);
+        final File file = new File(realDirPath);
+        final List<DicomTag> dicomTags = dicomTagMapper.queryNeedStore();
+
         try (Stream<Path> paths = Files.walk(file.toPath())) {
             paths.filter(it -> !Files.isDirectory(it)).forEach(it -> {
                         try {
                             final File dicomFile = it.toFile();
-                            DicomFrame dicomFrame = new DicomFrame();
+                            DicomImagePretreatment dicomFrame = new DicomImagePretreatment();
                             dicomFrame.setFile(dicomFile);
-                            dicomFrame.setMetaData(DicomParse.parseMetaData(dicomFile));
+//                            dicomFrame.setMetaData(DicomParse.parseMetaData(dicomFile));
                             dicomFrame.setAttributes(DicomParse.parseAttributes(dicomFile));
-                            dicomFrame.setDataSet(DicomParse.parseDataSet(dicomFile));
+//                            dicomFrame.setDataSet(DicomParse.parseDataSet(dicomFile));
                             dicomFrame.setSourceFileName(dicomFile.getName());
                             list.add(dicomFrame);
                         } catch (IOException e) {
@@ -80,13 +85,13 @@ public class TestController {
                     }
             );
         }
-        log.info("" + list);
+        DicomHelper.bestSeriesFiltrate(list, dicomTags);
     }
 
     @GetMapping("/validated")
     public void validated() throws IOException {
         final File dicomFile = ResourceUtils.getFile(filePath);
-        DicomFrame dicomFrame = new DicomFrame();
+        DicomImagePretreatment dicomFrame = new DicomImagePretreatment();
         dicomFrame.setFile(dicomFile);
         dicomFrame.setAttributes(DicomParse.parseAttributes(dicomFile));
         dicomFrame.setSourceFileName(dicomFile.getName());
@@ -115,4 +120,6 @@ public class TestController {
         }
         return map;
     }
+
+
 }

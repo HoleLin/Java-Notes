@@ -1,6 +1,6 @@
 package cn.holelin.dicom.util.validator;
 
-import cn.holelin.dicom.entity.DicomFrame;
+import cn.holelin.dicom.domain.DicomImagePretreatment;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.IOD;
 import org.dcm4che3.data.ValidationResult;
@@ -26,7 +26,7 @@ public class XmlValidator implements Validator {
     }
 
     @Override
-    public Boolean validated(DicomFrame dicomFrame) {
+    public Boolean validated(DicomImagePretreatment dicomFrame) {
         final Attributes attributes = dicomFrame.getAttributes();
         if (Objects.nonNull(attributes)) {
             final ValidationResult validationResult = attributes.validate(validator);

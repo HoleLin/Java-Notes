@@ -56,6 +56,10 @@
         <!--  DICOM相关    -->
         <commons-net.version>3.8.0</commons-net.version>
         <dcm4che.version>5.23.3</dcm4che.version>
+        <!--  RxJava3      -->
+        <rxjava3.version>3.1.4</rxjava3.version>
+        <!--  HTTP      -->
+        <okhttp3.version>4.9.3</okhttp3.version>
     </properties>
     <dependencies>
         <dependency>
@@ -248,7 +252,7 @@
                 <artifactId>mybatis-plus-boot-starter</artifactId>
                 <version>${mybatis.plus.version}</version>
             </dependency>
-
+            <!-- JMH -->
             <dependency>
                 <groupId>org.openjdk.jmh</groupId>
                 <artifactId>jmh-core</artifactId>
@@ -259,6 +263,19 @@
                 <artifactId>jmh-generator-annprocess</artifactId>
                 <version>${jmh.version}</version>
                 <scope>provided</scope>
+            </dependency>
+            <!--  HTTP          -->
+            <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp -->
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp</artifactId>
+                <version>${okhttp3.version}</version>
+            </dependency>
+            <!-- RxJava3 -->
+            <dependency>
+                <groupId>io.reactivex.rxjava3</groupId>
+                <artifactId>rxjava</artifactId>
+                <version>${rxjava3.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -278,6 +295,10 @@
         <module>dicom</module>
         <module>security</module>
         <module>flyway-base</module>
+        <module>rxjava</module>
+        <module>aviator-script</module>
+        <module>security/spring-security</module>
+        <module>security/shiro</module>
     </modules>
     <build>
         <plugins>

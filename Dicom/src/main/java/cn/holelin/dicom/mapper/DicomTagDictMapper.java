@@ -4,7 +4,15 @@ import cn.holelin.dicom.entity.DicomTagDict;
 import org.apache.ibatis.annotations.Mapper;
 
 import java.util.List;
-
+/**
+ * @Description:
+ * @Author: HoleLin
+ * @CreateDate: 2022/5/19 11:29 PM
+ * @UpdateUser: HoleLin
+ * @UpdateDate: 2022/5/19 11:29 PM
+ * @UpdateRemark: 修改内容
+ * @Version: 1.0
+ */
 @Mapper
 public interface DicomTagDictMapper {
     /**
