@@ -7,7 +7,19 @@ import java.util.List;
 import java.util.concurrent.locks.LockSupport;
 
 @Slf4j
-public class GuardedObject {
+public class
+
+
+
+
+
+
+
+
+
+
+
+GuardedObject {
     private Object response;
     private Object lock = new Object();
 

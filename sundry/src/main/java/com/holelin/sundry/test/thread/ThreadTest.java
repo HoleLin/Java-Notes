@@ -2,6 +2,9 @@ package com.holelin.sundry.test.thread;
 
 import org.junit.Test;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.util.concurrent.CountDownLatch;
 
 public class ThreadTest {
@@ -38,6 +41,7 @@ public class ThreadTest {
             e.printStackTrace();
         }
     }
+
     @Test
     public void testReorder() {
         CountDownLatch latch1 = new CountDownLatch(100);
@@ -70,6 +74,15 @@ public class ThreadTest {
             Thread.sleep(3000);
         } catch (InterruptedException e) {
             e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void test() {
+        final ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        final ThreadInfo[] threadInfos = threadMXBean.dumpAllThreads(false, false);
+        for (ThreadInfo threadInfo : threadInfos) {
+            System.out.println("[" + threadInfo.getThreadId() + "]" + threadInfo.getThreadName());
         }
     }
 }

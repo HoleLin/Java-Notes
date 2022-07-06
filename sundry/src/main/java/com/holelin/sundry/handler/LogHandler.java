@@ -1,32 +1,29 @@
 package com.holelin.sundry.handler;
 
-import cn.hutool.json.JSONUtil;
+import com.alibaba.fastjson.JSON;
 import com.holelin.sundry.annotation.Log;
-import com.holelin.sundry.constants.StringConstants;
-import com.holelin.sundry.domain.OperationLog;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import javax.servlet.http.HttpServletRequest;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
 /**
- * @Description: 日志切面,
+ * @Description: 日志切面
  * @Author: HoleLin
  * @CreateDate: 2022/1/12 2:39 PM
  * @UpdateUser: HoleLin
@@ -41,55 +38,56 @@ import java.util.UUID;
 @Component
 public class LogHandler {
 
-    @Pointcut("execution(* com.holelin.sundry.controller.*.*(..))")
+    @Pointcut("@annotation(com.holelin.sundry.annotation.Log)")
     public void logPointcut() {
+    }
+    /**
+     * @param joinPoint
+     * @author fu
+     * @description 切面方法入参日志打印
+     * @date 2020/7/15 10:30
+     */
+    @Before("logPointcut()")
+    public void doBefore(JoinPoint joinPoint) throws Throwable {
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        HttpServletRequest request = attributes.getRequest();
+        String methodDetailDescription = this.getAspectMethodLogDesc(joinPoint);
+        log.info("------------------------------- start --------------------------");
+        /**
+         * 打印自定义方法描述
+         */
+        log.info("Method detail Description: {}", methodDetailDescription);
+        /**
+         * 打印请求入参
+         */
+        log.info("Request Args: {}", JSON.toJSONString(joinPoint.getArgs()));
+        /**
+         * 打印请求方式
+         */
+        log.info("Request method: {}", request.getMethod());
+        /**
+         * 打印请求 url
+         */
+        log.info("Request URL: {}", request.getRequestURL().toString());
+
+        /**
+         * 打印调用方法全路径以及执行方法
+         */
+        log.info("Request Class and Method: {}.{}", joinPoint.getSignature().getDeclaringTypeName(), joinPoint.getSignature().getName());
     }
 
     @Around("logPointcut()")
     public Object doAround(ProceedingJoinPoint point) throws Throwable {
+        String aspectMethodLogDescPJ = getAspectMethodLogDesc(point);
         StopWatch stopWatch = new StopWatch(UUID.randomUUID().toString());
         stopWatch.start();
         final Object result = point.proceed();
         stopWatch.stop();
-        final Method method = getMethod(point);
-        if (Objects.nonNull(method.getAnnotation(Log.class))) {
-            OperationLog operationLog = new OperationLog();
-            final Class<?> clazz = getClass(point);
-            final String params = getParams(point);
-            operationLog.setElapsedTimeWithSeconds(stopWatch.getTotalTimeSeconds());
-            operationLog.setElapsedTimeWithMillis(stopWatch.getTotalTimeMillis());
-            operationLog.setMethodName(method.getName());
-            operationLog.setParameters(params);
-            final RequestMapping requestMapping = clazz.getAnnotation(RequestMapping.class);
-            if (Objects.nonNull(requestMapping)) {
-                final String[] classValue = requestMapping.value();
-                final PostMapping postMapping = method.getAnnotation(PostMapping.class);
-                if (Objects.nonNull(postMapping)) {
-                    final String[] methodValue = postMapping.value();
-                    final String classPath = classValue[0];
-                    final String methodPath = methodValue[0];
-                    operationLog.setFullPath(applyPrefix(classPath) + applyPrefix(methodPath));
-                }
-            }
-            operationLog.setResponse(JSONUtil.parse(result).toString());
-            log.info("logBean:{}", operationLog);
-        }
+        log.info("{} Response result: {}", aspectMethodLogDescPJ, JSON.toJSONString(result));
+        log.info("------------------------------- end ------------------------------");
         return result;
     }
 
-    /**
-     * 补充前缀
-     *
-     * @param classPath 访问路径
-     * @return
-     */
-    private String applyPrefix(String classPath) {
-        if (StringUtils.indexOf(classPath, StringConstants.SLASH) != 0) {
-            return StringConstants.SLASH + classPath;
-        } else {
-            return classPath;
-        }
-    }
 
     @AfterReturning(returning = "ref", pointcut = "logPointcut()")
     public void doAfterReturning(JoinPoint point, Object ref) {
@@ -119,31 +117,49 @@ public class LogHandler {
         return signature.getMethod();
     }
 
+
     /**
-     * 获取类
-     *
-     * @param point
-     * @return
+     * @param joinPoint
+     * @description @PrintlnLog 注解作用的切面方法详细细信息
+     * @date 2020/7/15 10:34
      */
-    private Class<?> getClass(JoinPoint point) {
-        return point.getTarget().getClass();
+    public String getAspectMethodLogDesc(JoinPoint joinPoint) throws Exception {
+        String targetName = joinPoint.getTarget().getClass().getName();
+        String methodName = joinPoint.getSignature().getName();
+        Object[] arguments = joinPoint.getArgs();
+        return getAspectMethodLogDesc(targetName, methodName, arguments);
     }
 
     /**
-     * 获取
-     *
-     * @param point
-     * @return
+     * @param proceedingJoinPoint
+     * @description @PrintlnLog 注解作用的切面方法详细细信息
      */
-    private String getParams(JoinPoint point) {
-        List<String> list = new ArrayList<>();
-        final Object[] args = point.getArgs();
-        if (Objects.nonNull(args)) {
-            for (Object arg : args) {
-                list.add(JSONUtil.parse(arg).toString());
+    public String getAspectMethodLogDesc(ProceedingJoinPoint proceedingJoinPoint) throws Exception {
+        String targetName = proceedingJoinPoint.getTarget().getClass().getName();
+        String methodName = proceedingJoinPoint.getSignature().getName();
+        Object[] arguments = proceedingJoinPoint.getArgs();
+        return getAspectMethodLogDesc(targetName, methodName, arguments);
+    }
+
+    /**
+     * @param targetName
+     * @param methodName
+     * @param arguments
+     * @description 自定义注解参数
+     */
+    public String getAspectMethodLogDesc(String targetName, String methodName, Object[] arguments) throws Exception {
+        Class targetClass = Class.forName(targetName);
+        Method[] methods = targetClass.getMethods();
+        StringBuilder description = new StringBuilder("");
+        for (Method method : methods) {
+            if (method.getName().equals(methodName)) {
+                Class[] clazzs = method.getParameterTypes();
+                if (clazzs.length == arguments.length) {
+                    description.append(method.getAnnotation(Log.class).description());
+                    break;
+                }
             }
         }
-        return list.toString();
+        return description.toString();
     }
-
 }

@@ -1,5 +1,6 @@
 package com.holelin.mysql.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import javax.persistence.Column;
@@ -12,6 +13,7 @@ import javax.persistence.Table;
 @Data
 @Entity
 @Table(name = "multiple_data_sources")
+@TableName("multiple_data_sources")
 public class MultipleDataSourcesEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

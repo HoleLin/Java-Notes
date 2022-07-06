@@ -7,10 +7,9 @@
         <artifactId>common</artifactId>
         <version>0.0.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
-
     </parent>
     <groupId>cn.holelin</groupId>
-    <artifactId>files</artifactId>
+    <artifactId>files-util</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>files</name>
     <description>files</description>

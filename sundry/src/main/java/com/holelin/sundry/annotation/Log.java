@@ -20,4 +20,10 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface Log {
+    /**
+     * 自定义日志描述信息文案
+     *
+     * @return
+     */
+    String description() default "";
 }

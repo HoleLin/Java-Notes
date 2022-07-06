@@ -42,6 +42,7 @@ public class FileFormatValidator {
             randomAccessFile.skipBytes(offset);
             randomAccessFile.read(bytes);
             final String magicNumber = HexUtil.encodeHexStr(bytes).toUpperCase();
+            System.out.println(magicNumber);
             final Optional<FileType> fileTypeOptional = Arrays.stream(FileType.values())
                     .filter(it -> magicNumber.startsWith(it.signature))
                     .findFirst();
@@ -67,6 +68,13 @@ public class FileFormatValidator {
 
     public Boolean isDicom(File file) {
         return FileType.DICOM == deduceFileType(file, FileType.DICOM.offset);
+    }
+
+    public static void main(String[] args) {
+        System.out.println();
+        final String pathname = "/Users/holelin/Downloads/E-HP11-00273/E-HP11-00273_13.dcm";
+        final FileFormatValidator fileFormatValidator = new FileFormatValidator();
+        System.out.println(fileFormatValidator.isDicom(new File(pathname)));
     }
 
     public Boolean isZip(File file) {
