@@ -35,7 +35,7 @@ public enum FileType {
     /**
      * PDF
      */
-    PDF("25504446", ".xlsx", 0),
+    PDF("25504446", ".pdf", 0),
     /**
      * 未知 尚未兼容
      */

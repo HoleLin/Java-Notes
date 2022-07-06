@@ -91,7 +91,7 @@
                     <!--driver-->
                     <driverClassName>com.mysql.cj.jdbc.Driver</driverClassName>
                     <!--jdbc url-->
-                    <jdbcUrl>jdbc:mysql://localhost:3306/test_data?useUnicode=true&amp;characterEncoding=utf-8&amp;serverTimezone=UTC&amp;useSSL=false</jdbcUrl>
+                    <jdbcUrl>jdbc:mysql://localhost:3306/kura?useUnicode=true&amp;characterEncoding=utf-8&amp;serverTimezone=UTC&amp;useSSL=false</jdbcUrl>
                     <!--生成文件类型-->
                     <fileType>WORD</fileType>
                     <!--文件输出目录-->
