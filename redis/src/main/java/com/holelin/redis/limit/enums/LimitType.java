@@ -1,4 +1,4 @@
-package com.holelin.redis.enums;
+package com.holelin.redis.limit.enums;
 
 /**
  * @Description: 限流类型

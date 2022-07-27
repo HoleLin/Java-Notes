@@ -1,7 +1,7 @@
-package com.holelin.redis.controller;
+package com.holelin.redis.limit.controller;
 
-import com.holelin.redis.annotations.Limit;
-import com.holelin.redis.enums.LimitType;
+import com.holelin.redis.limit.annotations.Limit;
+import com.holelin.redis.limit.enums.LimitType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,8 +25,8 @@ public class CurrentLimitingController {
     private static final AtomicInteger ATOMIC_INTEGER_3 = new AtomicInteger();
 
 
-    @Limit(key = "limitTest", period = 10, count = 3)
-    @GetMapping("/limitTest1")
+    @Limit(key = "limit_test", period = 10, count = 3)
+    @GetMapping("/limit-test1")
     public int testLimiter1() {
 
         return ATOMIC_INTEGER_1.incrementAndGet();
@@ -34,14 +34,14 @@ public class CurrentLimitingController {
 
 
     @Limit(key = "customer_limit_test", period = 10, count = 3, limitType = LimitType.CUSTOMER)
-    @GetMapping("/limitTest2")
+    @GetMapping("/limit-test2")
     public int testLimiter2() {
 
         return ATOMIC_INTEGER_2.incrementAndGet();
     }
 
     @Limit(key = "ip_limit_test", period = 10, count = 3, limitType = LimitType.IP)
-    @GetMapping("/limitTest3")
+    @GetMapping("/limit-test3")
     public int testLimiter3() {
 
         return ATOMIC_INTEGER_3.incrementAndGet();

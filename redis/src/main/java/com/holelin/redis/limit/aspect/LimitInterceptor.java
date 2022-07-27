@@ -1,8 +1,8 @@
-package com.holelin.redis.aspect;
+package com.holelin.redis.limit.aspect;
 
 import com.google.common.collect.ImmutableList;
-import com.holelin.redis.annotations.Limit;
-import com.holelin.redis.enums.LimitType;
+import com.holelin.redis.limit.annotations.Limit;
+import com.holelin.redis.limit.enums.LimitType;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -47,7 +47,7 @@ public class LimitInterceptor {
      * @description 切面
      * @date 2020/4/8 13:04
      */
-    @Around("execution(public * *(..)) && @annotation(com.holelin.redis.annotations.Limit)")
+    @Around("execution(public * *(..)) && @annotation(com.holelin.redis.limit.annotations.Limit)")
     public Object interceptor(ProceedingJoinPoint pjp) {
         MethodSignature signature = (MethodSignature) pjp.getSignature();
         Method method = signature.getMethod();
@@ -75,8 +75,8 @@ public class LimitInterceptor {
         ImmutableList<String> keys = ImmutableList.of(StringUtils.join(limitAnnotation.prefix(), key));
         try {
             String luaScript = buildLuaScript();
-            RedisScript<Number> redisScript = new DefaultRedisScript<>(luaScript, Number.class);
-            Number count = redisTemplate.execute(redisScript, keys, limitCount, limitPeriod);
+            RedisScript<Long> redisScript = new DefaultRedisScript<>(luaScript, Long.class);
+            Long count = redisTemplate.execute(redisScript, keys, limitCount, limitPeriod);
             log.info("Access try count is {} for name={} and key = {}", count, name, key);
             if (count != null && count.intValue() <= limitCount) {
                 return pjp.proceed();

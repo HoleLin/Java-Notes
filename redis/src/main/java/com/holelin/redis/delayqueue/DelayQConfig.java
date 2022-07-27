@@ -15,7 +15,7 @@ import javax.annotation.Resource;
 @Configuration
 public class DelayQConfig {
 
- /**
+    /**
      * 交互事件超时结束任务延迟队列
      */
     public static final String DELAY_QUEUE_INTERACT_EVENT_AUTO_CLOSE = "interact_event_auto_close";

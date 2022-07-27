@@ -1,6 +1,6 @@
-package com.holelin.redis.annotations;
+package com.holelin.redis.limit.annotations;
 
-import com.holelin.redis.enums.LimitType;
+import com.holelin.redis.limit.enums.LimitType;
 
 import java.lang.annotation.*;
 

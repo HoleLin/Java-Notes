@@ -1,6 +1,8 @@
 package com.holelin.redis.delayqueue;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
@@ -9,6 +11,7 @@ import java.util.function.Function;
 
 
 @Slf4j
+@Component
 public class PooledRedisClient {
 
     private static final int DEFAULT_RETRY_TIME = 3;
