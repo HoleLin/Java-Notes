@@ -1,5 +1,7 @@
 package com.holelin.sundry.test.common;
 
+import org.junit.jupiter.api.Test;
+
 /**
 * @Description:
 * @Author:         HoleLin

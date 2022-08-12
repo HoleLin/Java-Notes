@@ -26,4 +26,8 @@
 
     <build>
     </build>
+    <modules>
+        <module>spring-security</module>
+        <module>shiro</module>
+    </modules>
 </project>

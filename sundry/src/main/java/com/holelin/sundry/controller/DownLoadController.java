@@ -1,7 +1,10 @@
 package com.holelin.sundry.controller;
 
-import org.springframework.stereotype.Controller;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.StopWatch;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -12,11 +15,23 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.net.URLEncoder;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
-@Controller
+@Slf4j
+@RestController
+@RequestMapping("/download")
 public class DownLoadController {
     private final static String utf8 = "utf-8";
+    final String pathname = "/Users/holelin/data/ISO/win11-22000-arm64.ISO";
+
 
     @RequestMapping("/down")
     public void downLoadFile(HttpServletRequest request, HttpServletResponse response) throws IOException {
@@ -79,6 +94,146 @@ public class DownLoadController {
             }
             if (os != null) {
                 os.close();
+            }
+        }
+    }
+
+    @GetMapping("/download-by-nio")
+    public void downloadByNIO(HttpServletResponse response) {
+        final StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        final File file = new File(pathname);
+        OutputStream os = null;
+        //分配缓冲区 单位kb
+        ByteBuffer buffer = ByteBuffer.allocateDirect(786432);
+
+        try {
+            // 取得输出流
+            os = response.getOutputStream();
+            String contentType = Files.probeContentType(Paths.get(file.getAbsolutePath()));
+            response.setHeader("Content-Type", contentType);
+            response.setHeader("Content-Disposition", "attachment;filename=" + new String(file.getName().getBytes("utf-8"), "ISO8859-1"));
+            FileInputStream fileInputStream = new FileInputStream(file);
+            WritableByteChannel writableByteChannel = Channels.newChannel(os);
+            FileChannel fileChannel = fileInputStream.getChannel();
+            //将通道中数据存入缓冲区
+            while (fileChannel.read(buffer) != -1) {
+                //Flips this buffer. The limit is set to the current position and then the position is set to zero. If the mark is defined then it is discarded
+                //将缓存字节数组的指针设置为数组的开始序列即数组下标0。这样就可以从buffer开头，对该buffer进行遍历读取,读出当前缓冲区中的数据，不是按照缓冲区容量而是内容长度
+                buffer.flip();
+                //将缓冲区数据写入到输出通道中
+                writableByteChannel.write(buffer);
+                //写完数据清除缓冲区
+                buffer.clear();
+            }
+            fileChannel.close();
+            os.flush();
+            writableByteChannel.close();
+            stopWatch.stop();
+            log.info("nio下载共耗时:{}ms,{}s", stopWatch.getTotalTimeMillis(), stopWatch.getTotalTimeSeconds());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        //文件的关闭放在finally中
+        finally {
+            try {
+                if (os != null) {
+                    os.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    @GetMapping("/download-by-nio2")
+    public void downloadByNIO2(HttpServletResponse response) {
+        final StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        final File file = new File(pathname);
+        OutputStream os = null;
+        //分配缓冲区 单位kb
+        ByteBuffer buffer = ByteBuffer.allocate(1024);
+
+        try {
+            // 取得输出流
+            os = response.getOutputStream();
+            String contentType = Files.probeContentType(Paths.get(file.getAbsolutePath()));
+            response.setHeader("Content-Type", contentType);
+            response.setHeader("Content-Disposition", "attachment;filename=" + new String(file.getName().getBytes("utf-8"), "ISO8859-1"));
+            FileInputStream fileInputStream = new FileInputStream(file);
+            FileChannel fileChannel = fileInputStream.getChannel();
+
+            byte[] byteArr = new byte[1024];
+            int nRead, nGet;
+
+            while ((nRead = fileChannel.read(buffer)) != -1) {
+                if (nRead == 0) {
+                    continue;
+                }
+                buffer.position(0);
+                buffer.limit(nRead);
+                while (buffer.hasRemaining()) {
+                    nGet = Math.min(buffer.remaining(), 1024);
+                    // read bytes from disk
+                    buffer.get(byteArr, 0, nGet);
+                    // write bytes to output
+                    response.getOutputStream().write(byteArr);
+                }
+                buffer.clear();
+
+            }
+            fileChannel.close();
+            stopWatch.stop();
+            log.info("nio下载共耗时:{}ms,{}s", stopWatch.getTotalTimeMillis(), stopWatch.getTotalTimeSeconds());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        //文件的关闭放在finally中
+        finally {
+            try {
+                if (os != null) {
+                    os.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    @GetMapping("/download")
+    public void download(HttpServletResponse response) {
+        final StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        final File file = new File(pathname);
+        OutputStream os = null;
+        try {
+            // 取得输出流
+            os = new BufferedOutputStream(response.getOutputStream());
+            String contentType = Files.probeContentType(Paths.get(file.getAbsolutePath()));
+            response.setHeader("Content-Type", contentType);
+            response.setHeader("Content-Disposition", "attachment;filename=" + new String(file.getName().getBytes("utf-8"), "ISO8859-1"));
+            InputStream fileInputStream = new BufferedInputStream(new FileInputStream(file));
+            final byte[] buffer = new byte[1024];
+            int len = 0;
+            while ((len = fileInputStream.read(buffer, 0, 1024)) != -1) {
+                os.write(buffer, 0, len);
+            }
+            os.flush();
+            stopWatch.stop();
+            log.info("下载共耗时:{}ms,{}s", stopWatch.getTotalTimeMillis(), stopWatch.getTotalTimeSeconds());
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        //文件的关闭放在finally中
+        finally {
+            try {
+                if (os != null) {
+                    os.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }

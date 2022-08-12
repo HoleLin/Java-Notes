@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.5.12</version>
+        <version>2.7.2</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>cn.holelin</groupId>
@@ -21,12 +21,11 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <!-- Spring       -->
-        <springboot.version>2.5.6</springboot.version>
+        <springboot.version>2.7.2</springboot.version>
         <spring.kafka.version>2.5.5.RELEASE</spring.kafka.version>
         <!-- 接口文档       -->
-        <springfox.swagger2.version>2.9.2</springfox.swagger2.version>
-        <knife4j.springboot.starter.version>2.0.4</knife4j.springboot.starter.version>
-        <springfox.swagger.version>2.2.2</springfox.swagger.version>
+        <springfox.swagger2.version>3.0.0</springfox.swagger2.version>
+        <knife4j.springboot.starter.version>3.0.3</knife4j.springboot.starter.version>
         <!-- 测试   -->
         <junit-jupiter.version>5.3.1</junit-jupiter.version>
         <!-- 工具类       -->
@@ -60,6 +59,8 @@
         <rxjava3.version>3.1.4</rxjava3.version>
         <!--  HTTP      -->
         <okhttp3.version>4.9.3</okhttp3.version>
+        <!-- 支付宝     -->
+        <alipay.version>4.31.84.ALL</alipay.version>
     </properties>
     <dependencies>
         <dependency>
@@ -277,6 +278,16 @@
                 <artifactId>rxjava</artifactId>
                 <version>${rxjava3.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.alipay.sdk</groupId>
+                <artifactId>alipay-sdk-java</artifactId>
+                <version>${alipay.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-mail</artifactId>
+                <version>${springboot.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
     <modules>
@@ -285,11 +296,6 @@
         <module>redis</module>
         <module>sundry</module>
         <module>elasticsearch</module>
-        <module>business-automation</module>
-        <module>business-automation/flowable</module>
-        <module>business-automation/activiti</module>
-        <module>business-automation/aviator</module>
-        <module>business-automation/freemarker</module>
         <module>algorithms</module>
         <module>websocket</module>
         <module>dicom</module>
@@ -297,8 +303,6 @@
         <module>flyway-base</module>
         <module>rxjava</module>
         <module>aviator-script</module>
-        <module>security/spring-security</module>
-        <module>security/shiro</module>
         <module>common</module>
     </modules>
     <build>

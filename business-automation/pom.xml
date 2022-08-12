@@ -55,4 +55,11 @@
         </plugins>
     </build>
 
+    <modules>
+        <module>flowable</module>
+        <module>activiti</module>
+        <module>aviator</module>
+        <module>freemarker</module>
+        <module>alipay</module>
+    </modules>
 </project>

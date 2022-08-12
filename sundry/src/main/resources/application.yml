@@ -7,3 +7,32 @@ spring:
       enabled: false
       max-file-size: 10MB
       max-request-size: 10MB
+  jackson:
+    date-format: yyyy-MM-dd hh:mm:ss
+    time-zone: GMT+8
+  mail:
+    host: smtp.mxhichina.com
+    username: junlin.chen@dianei-ai.com
+    password: 1226410785ccJ..
+    test-connection: true
+    protocol: smtp
+    properties:
+      mail:
+        debug: true
+        smtp:
+          sendpartial: true
+          socketFactory:
+            class: javax.net.ssl.SSLSocketFactory
+            port: 465
+            auth: true
+            starttls:
+              enable: true
+              required: true
+test:
+  list:
+    ids:
+      - 1
+      - 2
+      - 3
+    topics: topic1,topic2,topic3
+  maps: "{key1: 'value1', key2: 'value2'}"
