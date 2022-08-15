@@ -304,6 +304,7 @@
         <module>rxjava</module>
         <module>aviator-script</module>
         <module>common</module>
+        <module>spring-demo</module>
     </modules>
     <build>
         <plugins>
