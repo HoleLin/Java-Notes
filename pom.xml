@@ -61,6 +61,7 @@
         <okhttp3.version>4.9.3</okhttp3.version>
         <!-- 支付宝     -->
         <alipay.version>4.31.84.ALL</alipay.version>
+        <jol.version>0.16</jol.version>
     </properties>
     <dependencies>
         <dependency>
@@ -288,6 +289,12 @@
                 <artifactId>spring-boot-starter-mail</artifactId>
                 <version>${springboot.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.openjdk.jol</groupId>
+                <artifactId>jol-core</artifactId>
+                <version>${jol.version}</version>
+                <scope>provided</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
     <modules>
@@ -302,7 +309,6 @@
         <module>security</module>
         <module>flyway-base</module>
         <module>rxjava</module>
-        <module>aviator-script</module>
         <module>common</module>
         <module>spring-demo</module>
     </modules>

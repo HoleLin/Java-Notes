@@ -1,0 +1,58 @@
+package cn.holelin.springdemo.bean.controller;
+
+import cn.holelin.springdemo.bean.bean.User;
+import cn.holelin.springdemo.bean.service.DataService;
+import java.io.Closeable;
+import java.io.IOException;
+import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * @Description:
+ * @Author: HoleLin
+ * @CreateDate: 2022/8/30 16:05
+ * @UpdateUser: HoleLin
+ * @UpdateDate: 2022/8/30 16:05
+ * @UpdateRemark: 修改内容
+ * @Version: 1.0
+ */
+@RestController
+@RequestMapping("/data-service")
+public class DataServiceController implements Closeable {
+
+    @Qualifier("dataServiceController.InnerDataService")
+    @Autowired
+    DataService innerDataService;
+
+    List<User> users;
+
+    public DataServiceController(List<User> users) {
+        this.users = users;
+    }
+
+    @GetMapping("/users")
+    public void getUserInfo() {
+        System.out.println(users);
+    }
+
+    @Override
+    public void close() throws IOException {
+        System.out.println("closed");
+    }
+
+
+    @Service
+    public static class InnerDataService implements DataService {
+
+        @Override
+        public String getDataSourceName() {
+            return "InnerDataService";
+        }
+    }
+
+}
