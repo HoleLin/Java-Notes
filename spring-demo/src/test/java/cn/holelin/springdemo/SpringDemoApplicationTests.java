@@ -2,10 +2,8 @@ package cn.holelin.springdemo;
 
 import cn.holelin.springdemo.core.customElement.bean.User;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.transaction.annotation.Transactional;
 
 class SpringDemoApplicationTests {
 

@@ -12,8 +12,8 @@ spring:
     time-zone: GMT+8
   mail:
     host: smtp.mxhichina.com
-    username: junlinchen@med-3d.com
-    password: 1226410785ccJ..
+    username:
+    password:
     test-connection: true
     protocol: smtp
     properties:
