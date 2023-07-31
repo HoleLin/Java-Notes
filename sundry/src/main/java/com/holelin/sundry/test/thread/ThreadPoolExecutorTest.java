@@ -18,6 +18,7 @@ public class ThreadPoolExecutorTest {
         ArrayBlockingQueue<Runnable> runnable = new ArrayBlockingQueue<Runnable>(10);
         // 创建线程工厂
         ThreadFactory threadFactory = new ThreadFactory() {
+
             @Override
             public Thread newThread(Runnable r) {
                 Thread thread = new Thread(r, "working_thread_" + threadId.getAndIncrement());

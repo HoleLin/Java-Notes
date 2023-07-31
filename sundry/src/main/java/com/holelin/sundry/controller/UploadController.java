@@ -7,10 +7,8 @@ import org.apache.commons.fileupload.ProgressListener;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
 import org.apache.commons.io.FileUtils;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.util.StopWatch;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
@@ -78,7 +76,7 @@ public class UploadController {
         //名字
         String name = null;
         //文件目录
-        String path = "/Users/holelin/Projects/MySelf/Java-Notes/sundry/src/main/resources/upload";
+        String path = "C:\\Users\\YW\\IdeaProjects\\Java-Notes\\sundry\\src\\main\\resources\\upload";
         BufferedOutputStream os = null;
         //Create a progress listener
         ProgressListener progressListener = new ProgressListener() {
@@ -103,15 +101,20 @@ public class UploadController {
         try {
             // 设置缓冲区大小  先读到内存里在从内存写
             DiskFileItemFactory factory = new DiskFileItemFactory();
-            factory.setSizeThreshold(1024);
+            // 8k的缓冲区,文件大于8K则保存到临时目录
+            factory.setSizeThreshold(8 * 1024);
             factory.setRepository(new File(path));
             // 解析
             ServletFileUpload upload = new ServletFileUpload(factory);
             // 设置单个大小与最大大小
-            upload.setFileSizeMax(5L * 1024L * 1024L * 1024L);
-            upload.setSizeMax(10L * 1024L * 1024L * 1024L);
-            upload.setProgressListener(progressListener);
+            upload.setFileSizeMax(5L *  1024L * 1024L);
+            upload.setSizeMax(1024L * 1024L * 1024L);
+//            upload.setProgressListener(progressListener);
+            StopWatch stopWatch = new StopWatch();
+            stopWatch.start();
             List<FileItem> items = upload.parseRequest(request);
+            stopWatch.stop();
+            log.info("耗时:{}ms",stopWatch.getTotalTimeMillis());
             for (FileItem item : items) {
                 if (item.isFormField()) {
                     //获取分片数赋值给遍量

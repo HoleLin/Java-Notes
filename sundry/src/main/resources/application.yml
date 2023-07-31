@@ -12,7 +12,7 @@ spring:
     time-zone: GMT+8
   mail:
     host: smtp.mxhichina.com
-    username: junlin.chen@dianei-ai.com
+    username: junlinchen@med-3d.com
     password: 1226410785ccJ..
     test-connection: true
     protocol: smtp

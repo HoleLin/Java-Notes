@@ -2,15 +2,15 @@ package cn.holelin.springdemo.bean.controller;
 
 import cn.holelin.springdemo.bean.bean.User;
 import cn.holelin.springdemo.bean.service.DataService;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * @Description:
@@ -35,9 +35,9 @@ public class DataServiceController implements Closeable {
         this.users = users;
     }
 
-    @GetMapping("/users")
-    public void getUserInfo() {
-        System.out.println(users);
+    @PostMapping("/users")
+    public void getUserInfo(@RequestParam("test") String test) {
+        System.out.println(test);
     }
 
     @Override

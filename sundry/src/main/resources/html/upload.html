@@ -36,9 +36,9 @@
         chunked: true,      //开启分片
         // 如果要分片，分多大一片？ 默认大小为5M.
         // 100MB
-        chunkSize: 100 * 1024 * 1024,
+        chunkSize: 5 * 1024 * 1024,
         // 并发数,Chrome浏览器默认并发线程数为6
-        threads: 6,
+        threads: 20``,
         method: 'POST',
         // 10GB
         fileSizeLimit: 10 * 1024 * 1024 * 1024, //单个文件大小限制
@@ -46,7 +46,7 @@
         fileSingleSizeLimit: 10 * 1024 * 1024 * 1024,  //总文件大小
         fileVal: 'upload',
         // 不压缩image, 默认如果是jpeg，文件上传前会压缩一把再上传！
-        resize: false
+        resize: false``
     });
     uploader.on("beforeFileQueued", function (file) {
         console.log(file); //获取文件后缀
